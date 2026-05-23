@@ -1,0 +1,48 @@
+name: biblepresenter
+description: "BiblePresenter — Flutter casting controller + server"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  # Networking
+  network_info_plus: ^6.0.0
+  web_socket_channel: ^3.0.0
+  http: ^1.2.0
+  # Shelf server
+  shelf: ^1.4.1
+  shelf_router: ^1.1.4
+  shelf_web_socket: ^2.0.0
+  # File picking
+  file_picker: ^8.0.0
+  # Persistent paths
+  path_provider: ^2.1.0
+  # Shared preferences for persistent storage
+  shared_preferences: ^2.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  # Adaptive icon for Android (separate background + foreground)
+  adaptive_icon_background: "#060c18"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  remove_alpha_ios: true
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/bible_en.json
+    - assets/bible_hi.json
+    - assets/songs.json
