@@ -47,3 +47,4 @@ flutter:
     - assets/bible_hi.json
     - assets/songs.json
     - assets/church_logo.png
+    - assets/icon/app_icon.png

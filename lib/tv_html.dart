@@ -261,32 +261,34 @@ const String tvHtmlContent = r'''
       text-align: center;
     }
 
-    /* ── Logo styles ── */
+    /* ── Logo styles (TRUE full screen - zero gaps) ── */
     .logo-container {
       position: fixed;
-      inset: 0;
-      z-index: 100;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
       width: 100vw;
       height: 100vh;
-      padding: 2vh 2vw;
+      z-index: 200;
+      background: #000;
+      overflow: hidden;
+      margin: 0;
+      padding: 0;
+      border: none;
     }
     .logo-container img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      filter: drop-shadow(0 4px 30px rgba(0,0,0,0.8));
-    }
-    .logo-glow {
       position: absolute;
-      width: 60vw;
-      height: 60vh;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(201,169,110,0.08) 0%, transparent 70%);
-      pointer-events: none;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: contain;
+      object-position: center;
+      margin: 0;
+      padding: 0;
+      border: none;
+      display: block;
     }
 
     #idle-screen {
@@ -484,6 +486,12 @@ const String tvHtmlContent = r'''
   let pdfRendering = false;
   let currentPdfUrl = '';
 
+  // ── Remove full-screen logo (when switching content) ──
+  function removeLogoFullscreen() {
+    const logoEl = document.getElementById('logo-fullscreen');
+    if (logoEl) logoEl.remove();
+  }
+
   // ── Animated background handler ──
   function setAnimatedBg(type) {
     document.querySelectorAll('.anim-bg').forEach(el => el.classList.remove('active'));
@@ -644,6 +652,9 @@ const String tvHtmlContent = r'''
     const stage = document.getElementById('stage');
     const bgLayer = document.getElementById('bg-layer');
 
+    // Always remove full-screen logo when rendering any content
+    removeLogoFullscreen();
+
     // Handle background: animated or image
     const bgUrl = state.background?.url || '';
     if (bgUrl.startsWith('animated:')) {
@@ -660,6 +671,8 @@ const String tvHtmlContent = r'''
       bgLayer.style.opacity = '0';
     }
 
+    // Reset stage padding (logo type overrides it)
+    stage.style.padding = '5vw 8vw';
     stage.innerHTML = '';
 
     if (state.type === 'idle') {
@@ -693,7 +706,6 @@ const String tvHtmlContent = r'''
       const c = state.content || {};
 
       if (c.image && c.showText === false) {
-        const docViewer = document.getElementById('doc-viewer');
         const imgEl = document.createElement('img');
         imgEl.src = c.image;
         imgEl.style.cssText = 'width:100%;height:100%;object-fit:contain;position:fixed;inset:0;z-index:40;background:#000;';
@@ -748,11 +760,23 @@ const String tvHtmlContent = r'''
     } else if (state.type === 'logo') {
       closeDocViewer();
       const c = state.content || {};
-      stage.innerHTML = `
-        <div class="logo-container fade-in">
-          <div class="logo-glow"></div>
-          <img src="${c.image || ''}" alt="Church Logo" />
-        </div>`;
+      // Hide background layers for clean logo display
+      bgLayer.style.backgroundImage = '';
+      bgLayer.style.opacity = '0';
+      setAnimatedBg('');
+      stage.innerHTML = '';
+      stage.style.padding = '0';
+      // Logo placed directly on body (not inside stage) for TRUE full-screen
+      const existingLogo = document.getElementById('logo-fullscreen');
+      if (existingLogo) existingLogo.remove();
+      const logoDiv = document.createElement('div');
+      logoDiv.id = 'logo-fullscreen';
+      logoDiv.className = 'logo-container fade-in';
+      const logoImg = document.createElement('img');
+      logoImg.src = c.image || '';
+      logoImg.alt = 'Church Logo';
+      logoDiv.appendChild(logoImg);
+      document.body.appendChild(logoDiv);
 
     } else if (state.type === 'pdf') {
       const c = state.content || {};
@@ -813,6 +837,7 @@ const String tvHtmlContent = r'''
 
   connect();
   render();
+
 </script>
 </body>
 </html>
