@@ -6,7 +6,7 @@ const String tvHtmlContent = r'''
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>BiblePresenter — TV</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Pro:ital,wght@0,300;0,600;1,300;1,600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Pro:ital,wght@0,300;0,600;1,300;1,600&family=Tiro+Devanagari+Hindi:ital@0;1&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
@@ -39,6 +39,108 @@ const String tvHtmlContent = r'''
     #bg-overlay {
       position: fixed; inset: 0; z-index: 2;
       background: radial-gradient(ellipse at center, transparent 0%, rgba(10,10,15,0.5) 60%, rgba(10,10,15,0.92) 100%);
+    }
+
+    /* ── Animated Backgrounds ── */
+    .anim-bg {
+      position: fixed; inset: 0; z-index: 1;
+      opacity: 0; transition: opacity 1s ease;
+      pointer-events: none;
+    }
+    .anim-bg.active { opacity: 1; }
+
+    .anim-aurora {
+      background: linear-gradient(135deg, #0a0a2e 0%, #1a0a3e 25%, #0a2a4e 50%, #1a0a3e 75%, #0a0a2e 100%);
+      background-size: 400% 400%;
+      animation: aurora 12s ease infinite;
+    }
+    @keyframes aurora {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .anim-aurora::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 30% 50%, rgba(14,165,233,0.15) 0%, transparent 60%),
+                  radial-gradient(ellipse at 70% 30%, rgba(99,102,241,0.12) 0%, transparent 50%),
+                  radial-gradient(ellipse at 50% 80%, rgba(201,169,110,0.08) 0%, transparent 40%);
+      animation: auroraGlow 8s ease infinite;
+    }
+    @keyframes auroraGlow {
+      0%, 100% { opacity: 0.8; } 50% { opacity: 1.2; }
+    }
+
+    .anim-divine {
+      background: radial-gradient(ellipse at 50% 50%, #1a1a0a 0%, #0a0a0f 100%);
+    }
+    .anim-divine::before {
+      content: '';
+      position: absolute; inset: -50%;
+      background: conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(201,169,110,0.06) 60deg, transparent 120deg, rgba(201,169,110,0.04) 180deg, transparent 240deg, rgba(201,169,110,0.06) 300deg, transparent 360deg);
+      animation: divineRotate 30s linear infinite;
+    }
+    @keyframes divineRotate { to { transform: rotate(360deg); } }
+    .anim-divine::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(circle at 50% 50%, rgba(201,169,110,0.12) 0%, transparent 40%);
+      animation: divinePulse 6s ease-in-out infinite;
+    }
+    @keyframes divinePulse {
+      0%, 100% { opacity: 0.6; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+
+    .anim-sunset {
+      background: linear-gradient(180deg, #1a0a0a 0%, #2a1a0a 30%, #1a0a1a 60%, #0a0a2a 100%);
+      background-size: 100% 200%;
+      animation: sunset 10s ease infinite;
+    }
+    @keyframes sunset {
+      0%   { background-position: 50% 0%; }
+      50%  { background-position: 50% 100%; }
+      100% { background-position: 50% 0%; }
+    }
+    .anim-sunset::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 50% 70%, rgba(220,120,50,0.1) 0%, transparent 50%),
+                  radial-gradient(ellipse at 30% 40%, rgba(201,169,110,0.06) 0%, transparent 40%);
+    }
+
+    .anim-ocean {
+      background: linear-gradient(160deg, #0a1a2a 0%, #0a2a3a 30%, #0a1a3a 60%, #0a0a2a 100%);
+      background-size: 300% 300%;
+      animation: ocean 15s ease infinite;
+    }
+    @keyframes ocean {
+      0%   { background-position: 0% 0%; }
+      50%  { background-position: 100% 100%; }
+      100% { background-position: 0% 0%; }
+    }
+    .anim-ocean::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 60% 60%, rgba(14,165,233,0.1) 0%, transparent 50%),
+                  radial-gradient(ellipse at 30% 30%, rgba(56,189,248,0.06) 0%, transparent 40%);
+    }
+
+    .anim-fire {
+      background: #0a0a0a;
+    }
+    .anim-fire::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 50% 100%, rgba(220,80,20,0.12) 0%, transparent 50%),
+                  radial-gradient(ellipse at 30% 90%, rgba(201,169,110,0.08) 0%, transparent 40%),
+                  radial-gradient(ellipse at 70% 95%, rgba(180,60,10,0.06) 0%, transparent 35%);
+      animation: fireFlicker 4s ease-in-out infinite alternate;
+    }
+    @keyframes fireFlicker {
+      0%   { opacity: 0.7; transform: scaleY(1); }
+      50%  { opacity: 1; transform: scaleY(1.05); }
+      100% { opacity: 0.8; transform: scaleY(0.98); }
     }
 
     #stage {
@@ -74,8 +176,8 @@ const String tvHtmlContent = r'''
       width: 100%;
     }
     .verse-hi {
-      font-family: 'Crimson Pro', serif;
-      font-weight: 600;
+      font-family: 'Tiro Devanagari Hindi', 'Crimson Pro', serif;
+      font-weight: 400;
       color: #ffffff;
       line-height: 1.5;
       text-shadow: 0 2px 40px rgba(0,0,0,0.9), 0 0 60px rgba(255,255,255,0.08);
@@ -101,6 +203,28 @@ const String tvHtmlContent = r'''
       font-size: clamp(13px, 1.6vw, 22px);
       text-shadow: 0 0 30px rgba(201,169,110,0.4);
       text-align: center;
+    }
+
+    /* ── Song specific styles ── */
+    .song-title {
+      font-family: 'Cinzel', serif;
+      font-weight: 700;
+      color: var(--gold);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      font-size: clamp(14px, 2vw, 24px);
+      text-shadow: 0 0 30px rgba(201,169,110,0.3);
+      text-align: center;
+      margin-bottom: 16px;
+      opacity: 0.7;
+    }
+    .song-stanza-counter {
+      font-family: 'Cinzel', serif;
+      font-size: 11px;
+      letter-spacing: 0.3em;
+      color: rgba(255,255,255,0.25);
+      text-transform: uppercase;
+      margin-top: 12px;
     }
 
     .slide-container {
@@ -135,6 +259,34 @@ const String tvHtmlContent = r'''
       color: #ccc4b0;
       line-height: 1.7;
       text-align: center;
+    }
+
+    /* ── Logo styles ── */
+    .logo-container {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+      padding: 2vh 2vw;
+    }
+    .logo-container img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 30px rgba(0,0,0,0.8));
+    }
+    .logo-glow {
+      position: absolute;
+      width: 60vw;
+      height: 60vh;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(201,169,110,0.08) 0%, transparent 70%);
+      pointer-events: none;
     }
 
     #idle-screen {
@@ -289,6 +441,12 @@ const String tvHtmlContent = r'''
 </head>
 <body>
   <div id="bg-layer"></div>
+  <!-- Animated backgrounds -->
+  <div id="anim-aurora" class="anim-bg anim-aurora"></div>
+  <div id="anim-divine" class="anim-bg anim-divine"></div>
+  <div id="anim-sunset" class="anim-bg anim-sunset"></div>
+  <div id="anim-ocean" class="anim-bg anim-ocean"></div>
+  <div id="anim-fire" class="anim-bg anim-fire"></div>
   <div id="bg-overlay"></div>
 
   <div id="status-badge">
@@ -317,6 +475,7 @@ const String tvHtmlContent = r'''
 <script>
   let ws, reconnectTimer;
   let state = { type: 'idle', content: null, fontSize: 44 };
+  let currentAnimBg = '';
 
   // ── PDF state ──
   let pdfDoc = null;
@@ -324,6 +483,17 @@ const String tvHtmlContent = r'''
   let pdfTotalPages = 0;
   let pdfRendering = false;
   let currentPdfUrl = '';
+
+  // ── Animated background handler ──
+  function setAnimatedBg(type) {
+    document.querySelectorAll('.anim-bg').forEach(el => el.classList.remove('active'));
+    currentAnimBg = type;
+    if (type && type.startsWith('animated:')) {
+      const animName = type.replace('animated:', '');
+      const el = document.getElementById('anim-' + animName);
+      if (el) el.classList.add('active');
+    }
+  }
 
   // ── WebSocket connect ──
   function connect() {
@@ -374,7 +544,6 @@ const String tvHtmlContent = r'''
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
       const fullUrl = url.startsWith('http') ? url : (location.protocol + '//' + location.host + url);
-      // Add cache-busting param to avoid browser caching old PDF
       const cacheBust = fullUrl + (fullUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
       const loadingTask = pdfjsLib.getDocument({ url: cacheBust, useSystemFonts: true });
       pdfDoc = await loadingTask.promise;
@@ -389,7 +558,6 @@ const String tvHtmlContent = r'''
 
       await renderPdfPage(pdfPage);
 
-      // Report total pages back to controller via WS
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ event: 'pdf-loaded', data: { totalPages: pdfTotalPages, currentPage: 1 } }));
       }
@@ -398,7 +566,6 @@ const String tvHtmlContent = r'''
     } catch (e) {
       console.error('[TV] PDF load error:', e);
       docLoading.classList.remove('active');
-      // Fallback: try iframe
       pdfCanvas.style.display = 'none';
       pptxIframe.style.display = 'block';
       pptxIframe.src = url.startsWith('http') ? url : (location.protocol + '//' + location.host + url);
@@ -477,10 +644,18 @@ const String tvHtmlContent = r'''
     const stage = document.getElementById('stage');
     const bgLayer = document.getElementById('bg-layer');
 
-    if (state.background?.url) {
-      bgLayer.style.backgroundImage = 'url(' + state.background.url + ')';
+    // Handle background: animated or image
+    const bgUrl = state.background?.url || '';
+    if (bgUrl.startsWith('animated:')) {
+      bgLayer.style.backgroundImage = '';
+      bgLayer.style.opacity = '0';
+      setAnimatedBg(bgUrl);
+    } else if (bgUrl) {
+      setAnimatedBg('');
+      bgLayer.style.backgroundImage = 'url(' + bgUrl + ')';
       bgLayer.style.opacity = '0.45';
     } else {
+      setAnimatedBg('');
       bgLayer.style.backgroundImage = '';
       bgLayer.style.opacity = '0';
     }
@@ -555,10 +730,10 @@ const String tvHtmlContent = r'''
       const c = state.content || {};
       const stanzas = c.stanzas || [];
       const currentIdx = c.currentStanza || 0;
+      const totalStanzas = c.totalStanzas || stanzas.length;
+      const songTitle = c.title || '';
       const currentStanza = stanzas[currentIdx] || '';
-      // Replace both escaped \n and real newlines with <br/>
-      const stanzaText = currentStanza.replace(/\\n/g, '<br/><br/>').replace(/\n/g, '<br/><br/>');
-      // Auto-scale font based on stanza length
+      const stanzaText = currentStanza.replace(/\\n/g, '<br/>').replace(/\n/g, '<br/>');
       const textLen = currentStanza.length;
       const baseFs = state.fontSize || 44;
       const scale = textLen > 300 ? 0.55 : textLen > 200 ? 0.68 : textLen > 120 ? 0.82 : textLen > 60 ? 0.95 : 1.1;
@@ -567,6 +742,16 @@ const String tvHtmlContent = r'''
       stage.innerHTML = `
         <div class="verse-container fade-in" style="max-width:1050px;width:100%">
           <p class="verse-hi" style="font-size:${stanzaFs};line-height:1.8;letter-spacing:0.01em;white-space:pre-line">${stanzaText}</p>
+          <p class="song-stanza-counter">${currentIdx + 1} / ${totalStanzas}</p>
+        </div>`;
+
+    } else if (state.type === 'logo') {
+      closeDocViewer();
+      const c = state.content || {};
+      stage.innerHTML = `
+        <div class="logo-container fade-in">
+          <div class="logo-glow"></div>
+          <img src="${c.image || ''}" alt="Church Logo" />
         </div>`;
 
     } else if (state.type === 'pdf') {
@@ -574,19 +759,16 @@ const String tvHtmlContent = r'''
       const newUrl = c.url || '';
       const targetPage = c.currentPage || 1;
 
-      // Check if URL changed → force reload new PDF
       if (newUrl && newUrl !== currentPdfUrl) {
         stage.innerHTML = '';
         closeDocViewer();
         loadPdf(newUrl);
       } else if (pdfDoc && pdfTotalPages > 0) {
-        // Same PDF, just navigate page
         if (targetPage !== pdfPage && targetPage >= 1 && targetPage <= pdfTotalPages) {
           pdfPage = targetPage;
           renderPdfPage(pdfPage);
         }
       } else if (newUrl) {
-        // First load (pdfDoc is null)
         stage.innerHTML = '';
         loadPdf(newUrl);
       }
@@ -595,7 +777,6 @@ const String tvHtmlContent = r'''
       const c = state.content || {};
       const newUrl = c.url || '';
 
-      // Always reload PPTX when URL changes or new cast
       if (newUrl) {
         stage.innerHTML = '';
         closeDocViewer();

@@ -232,6 +232,16 @@ Future<void> startServer(dynamic message) async {
               _broadcast(_currentState);
               break;
 
+            case 'cast-logo':
+              _currentState = {
+                'type': 'logo',
+                'content': data,
+                'fontSize': data['fontSize'] ?? 44,
+                'background': data['background'] ?? _currentState['background'],
+              };
+              _broadcast(_currentState);
+              break;
+
             case 'cast-pdf':
               _currentState = {
                 'type': 'pdf',

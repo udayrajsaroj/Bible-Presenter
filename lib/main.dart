@@ -124,6 +124,28 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
   final _songTitleCtrl = TextEditingController();
   List<TextEditingController> _songStanzaCtrls = [TextEditingController(), TextEditingController()];
 
+  // ── Song Schedule state ──
+  List<Map<String, dynamic>> _schedules = []; // {date, name, songs: [{title, stanzas, songIndex}]}
+  int _activeScheduleIndex = -1;
+  int _scheduleSongIndex = 0;
+  int _scheduleStanzaIndex = 0;
+  bool _scheduleMode = false;
+  final _scheduleNameCtrl = TextEditingController();
+  DateTime _scheduleDate = DateTime.now();
+
+  // ── Animated backgrounds ──
+  final List<Map<String, String>> _animBgs = [
+    {'name': 'Aurora', 'id': 'animated:aurora'},
+    {'name': 'Divine Light', 'id': 'animated:divine'},
+    {'name': 'Sunset Glow', 'id': 'animated:sunset'},
+    {'name': 'Ocean Deep', 'id': 'animated:ocean'},
+    {'name': 'Fire Altar', 'id': 'animated:fire'},
+  ];
+
+  // ── Cast / Full-screen state ──
+  bool _isFullScreen = false;
+  static const _screenCastChannel = MethodChannel('biblepresenter/screencast');
+
   @override
   void initState() {
     super.initState();
@@ -173,6 +195,9 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
 
     // Load songs from asset + persistent storage
     _loadSongs();
+
+    // Load schedules from persistent storage
+    _loadSchedules();
   }
 
   // ══════════════════ LOAD BIBLE FROM ASSETS ══════════════════
@@ -324,7 +349,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
   void _filterSongs(String query) {
     setState(() {
       _songSearchQuery = query.toLowerCase().trim();
-      if (_songSearchQuery.isEmpty) { _filteredSongs = List.from(_allSongs); } 
+      if (_songSearchQuery.isEmpty) { _filteredSongs = List.from(_allSongs); }
       else {
         _filteredSongs = _allSongs.where((song) {
           final title = (song['title'] as String? ?? '').toLowerCase();
@@ -364,7 +389,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
     _songStanzaCtrls = [TextEditingController(), TextEditingController()];
     Navigator.pop(context);
     _saveManualSongs();
-    _showSnack('Song "$title" add ho gaya!');
+    _showSnack('Song "$title" added!');
   }
 
   void _deleteSong(int idx) {
@@ -377,7 +402,153 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
       if (_selectedSongIndex < 0) _selectedSongIndex = -1;
     });
     _saveManualSongs();
-    _showSnack('Song delete ho gaya');
+    _showSnack('Song deleted');
+  }
+
+  // ══════════════════ SCHEDULE METHODS ══════════════════
+  Future<void> _loadSchedules() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final str = prefs.getString('song_schedules') ?? '[]';
+      final List<dynamic> data = jsonDecode(str) as List<dynamic>;
+      if (mounted) {
+        setState(() { _schedules = data.cast<Map<String, dynamic>>(); });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveSchedules() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('song_schedules', jsonEncode(_schedules));
+    } catch (_) {}
+  }
+
+  void _createSchedule(String name, String dateStr) {
+    if (name.trim().isEmpty) return;
+    setState(() {
+      _schedules.insert(0, {
+        'name': name.trim(),
+        'date': dateStr,
+        'songs': <Map<String, dynamic>>[],
+      });
+      _activeScheduleIndex = 0;
+    });
+    _scheduleNameCtrl.clear();
+    Navigator.pop(context);
+    _saveSchedules();
+    _showSnack('Schedule "$name" created!');
+  }
+
+  void _addSongToSchedule(int scheduleIdx, int songIdx) {
+    if (scheduleIdx < 0 || scheduleIdx >= _schedules.length) return;
+    if (songIdx < 0 || songIdx >= _allSongs.length) return;
+    final song = _allSongs[songIdx];
+    setState(() {
+      final songs = List<Map<String, dynamic>>.from(_schedules[scheduleIdx]['songs'] ?? []);
+      songs.add({
+        'title': song['title'] ?? '',
+        'stanzas': List<String>.from(song['stanzas'] ?? []),
+        'songIndex': songIdx,
+      });
+      _schedules[scheduleIdx]['songs'] = songs;
+    });
+    _saveSchedules();
+    _showSnack('Song added to schedule!');
+  }
+
+  void _removeSongFromSchedule(int scheduleIdx, int songPosition) {
+    if (scheduleIdx < 0 || scheduleIdx >= _schedules.length) return;
+    setState(() {
+      final songs = List<Map<String, dynamic>>.from(_schedules[scheduleIdx]['songs'] ?? []);
+      if (songPosition < songs.length) {
+        songs.removeAt(songPosition);
+        _schedules[scheduleIdx]['songs'] = songs;
+      }
+    });
+    _saveSchedules();
+  }
+
+  void _deleteSchedule(int idx) {
+    setState(() {
+      _schedules.removeAt(idx);
+      if (_activeScheduleIndex >= _schedules.length) _activeScheduleIndex = _schedules.length - 1;
+      if (_activeScheduleIndex < 0) _activeScheduleIndex = -1;
+      _scheduleMode = false;
+    });
+    _saveSchedules();
+    _showSnack('Schedule deleted');
+  }
+
+  void _startSchedulePresentation(int scheduleIdx) {
+    if (scheduleIdx < 0 || scheduleIdx >= _schedules.length) return;
+    final songs = _schedules[scheduleIdx]['songs'] as List? ?? [];
+    if (songs.isEmpty) { _showSnack('No songs in this schedule!', error: true); return; }
+    setState(() {
+      _scheduleMode = true;
+      _activeScheduleIndex = scheduleIdx;
+      _scheduleSongIndex = 0;
+      _scheduleStanzaIndex = 0;
+    });
+    _castScheduleSong();
+  }
+
+  void _castScheduleSong() {
+    if (_activeScheduleIndex < 0 || _activeScheduleIndex >= _schedules.length) return;
+    final songs = _schedules[_activeScheduleIndex]['songs'] as List? ?? [];
+    if (_scheduleSongIndex < 0 || _scheduleSongIndex >= songs.length) return;
+    final song = songs[_scheduleSongIndex];
+    final stanzas = List<String>.from(song['stanzas'] ?? []);
+    _emit('cast-song', {
+      'title': song['title'] ?? '',
+      'stanzas': stanzas,
+      'currentStanza': _scheduleStanzaIndex,
+      'totalStanzas': stanzas.length,
+      'fontSize': _fontSize,
+      if (_bgUrl != null) 'background': {'url': _bgUrl},
+    });
+  }
+
+  void _scheduleNext() {
+    if (_activeScheduleIndex < 0 || _activeScheduleIndex >= _schedules.length) return;
+    final songs = _schedules[_activeScheduleIndex]['songs'] as List? ?? [];
+    if (songs.isEmpty) return;
+    final currentStanzas = List<String>.from(songs[_scheduleSongIndex]['stanzas'] ?? []);
+    if (_scheduleStanzaIndex < currentStanzas.length - 1) {
+      // Next stanza in same song
+      _scheduleStanzaIndex++;
+    } else if (_scheduleSongIndex < songs.length - 1) {
+      // Next song, first stanza
+      _scheduleSongIndex++;
+      _scheduleStanzaIndex = 0;
+    }
+    _castScheduleSong();
+    setState(() {});
+  }
+
+  void _schedulePrev() {
+    if (_activeScheduleIndex < 0 || _activeScheduleIndex >= _schedules.length) return;
+    final songs = _schedules[_activeScheduleIndex]['songs'] as List? ?? [];
+    if (songs.isEmpty) return;
+    if (_scheduleStanzaIndex > 0) {
+      // Prev stanza in same song
+      _scheduleStanzaIndex--;
+    } else if (_scheduleSongIndex > 0) {
+      // Prev song, last stanza
+      _scheduleSongIndex--;
+      final prevStanzas = List<String>.from(songs[_scheduleSongIndex]['stanzas'] ?? []);
+      _scheduleStanzaIndex = prevStanzas.length > 0 ? prevStanzas.length - 1 : 0;
+    }
+    _castScheduleSong();
+    setState(() {});
+  }
+
+  void _exitScheduleMode() {
+    setState(() {
+      _scheduleMode = false;
+      _scheduleSongIndex = 0;
+      _scheduleStanzaIndex = 0;
+    });
   }
 
   void _castSong() {
@@ -401,6 +572,186 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
     if (_selectedSongIndex < 0 || _selectedSongIndex >= _filteredSongs.length) return;
     final stanzas = _filteredSongs[_selectedSongIndex]['stanzas'] as List<String>? ?? [];
     if (_selectedStanzaIndex < stanzas.length - 1) { _selectedStanzaIndex++; _castSong(); setState(() {}); }
+  }
+
+  // ══════════════════ CAST LOGO TO TV ══════════════════
+  void _castLogo() {
+    rootBundle.load('assets/church_logo.png').then((data) {
+      final base64Str = base64Encode(data.buffer.asUint8List());
+      _emit('cast-logo', {
+        'image': 'data:image/png;base64,$base64Str',
+        'fontSize': _fontSize,
+        if (_bgUrl != null) 'background': {'url': _bgUrl},
+      });
+    }).catchError((e) {
+      _showSnack('Logo load error: $e', error: true);
+    });
+  }
+
+  // ══════════════════ SCREEN MIRRORING / FULL-SCREEN ══════════════════
+  Future<void> _openScreenMirrorSettings() async {
+    try {
+      await _screenCastChannel.invokeMethod('openScreenMirror');
+    } on PlatformException {
+      // Fallback: just show instructions
+      _showSnack('Turn on Screencast from phone quick settings', error: false);
+    }
+  }
+
+  void _toggleFullScreen() {
+    setState(() => _isFullScreen = !_isFullScreen);
+    if (_isFullScreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    }
+  }
+
+  String _getFullScreenContent() {
+    if (_tvState.isEmpty || _tvState['type'] == 'idle') return '';
+    final type = _tvState['type'] as String? ?? '';
+    final content = _tvState['content'] as Map<String, dynamic>? ?? {};
+
+    if (type == 'verse') {
+      final hi = content['textHi'] as String? ?? '';
+      final en = content['textEn'] as String? ?? '';
+      final ref = '${content['book'] ?? ''} ${content['chapter'] ?? ''}:${content['verse'] ?? ''}';
+      if (hi.isNotEmpty && en.isNotEmpty) return '$hi\n\n"$en"\n\n— $ref';
+      if (hi.isNotEmpty) return '$hi\n\n— $ref';
+      if (en.isNotEmpty) return '"$en"\n\n— $ref';
+      return content['text'] as String? ?? '';
+    } else if (type == 'slide') {
+      final title = content['title'] as String? ?? '';
+      final text = content['text'] as String? ?? '';
+      if (title.isNotEmpty && text.isNotEmpty) return '$title\n\n$text';
+      return title + text;
+    } else if (type == 'song') {
+      final stanzas = content['stanzas'] as List? ?? [];
+      final idx = content['currentStanza'] as int? ?? 0;
+      if (idx < stanzas.length) return stanzas[idx].toString();
+      return '';
+    }
+    return '';
+  }
+
+  void _showCastDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: kBg3,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            const Text('Cast to TV', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: kText)),
+            IconButton(icon: const Icon(Icons.close, color: kMuted), onPressed: () => Navigator.pop(context)),
+          ]),
+          const SizedBox(height: 16),
+
+          // Option 1: Screen Mirror (Miracast)
+          GestureDetector(
+            onTap: () {
+              Navigator.pop(context);
+              _toggleFullScreen();
+              _openScreenMirrorSettings();
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: kAccent.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: kAccent.withOpacity(0.4)),
+              ),
+              child: Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: kAccent.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.screen_share_outlined, size: 22, color: kAccent),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Screen Mirror', style: TextStyle(color: kText, fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text('Mirror your phone screen to TV (Miracast)', style: TextStyle(color: kMuted, fontSize: 10)),
+                ])),
+                const Icon(Icons.chevron_right, color: kMuted, size: 20),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Option 2: Browser on TV
+          GestureDetector(
+            onTap: () {
+              Navigator.pop(context);
+              _copyUrl();
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade900.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade800.withOpacity(0.4)),
+              ),
+              child: Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.orange.shade900.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+                  child: Icon(Icons.cast, size: 22, color: Colors.orange.shade400),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Browser Connect', style: TextStyle(color: kText, fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text('Open the URL in TV browser', style: TextStyle(color: kMuted, fontSize: 10)),
+                ])),
+                const Icon(Icons.chevron_right, color: kMuted, size: 20),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Instructions
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: kBg.withOpacity(0.6),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: kBorder.withOpacity(0.5)),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('HOW IT WORKS:', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: kGold, letterSpacing: 1.5)),
+              const SizedBox(height: 8),
+              _castStep('1', 'Tap Screen Mirror → App will enter fullscreen mode'),
+              const SizedBox(height: 4),
+              _castStep('2', 'Phone Screen Cast settings will open automatically'),
+              const SizedBox(height: 4),
+              _castStep('3', 'Select your TV → Phone screen will appear on TV'),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _castStep(String num, String text) {
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Container(
+        width: 18, height: 18,
+        decoration: BoxDecoration(color: kAccent.withOpacity(0.2), borderRadius: BorderRadius.circular(5)),
+        child: Center(child: Text(num, style: const TextStyle(fontSize: 9, color: kAccent, fontWeight: FontWeight.bold))),
+      ),
+      const SizedBox(width: 8),
+      Expanded(child: Text(text, style: const TextStyle(fontSize: 10, color: kMuted, height: 1.4))),
+    ]);
   }
 
   // ══════════════════ WEBSOCKET CONNECTION ══════════════════
@@ -455,7 +806,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
 
   void _emit(String event, Map<String, dynamic> data) {
     if (_channel == null || !_connected) {
-      _showSnack('Server se connected nahi! Reconnecting...', error: true);
+      _showSnack('Not connected to server! Reconnecting...', error: true);
       _connectWS();
       return;
     }
@@ -533,7 +884,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
       final fileName = pickedFile.name;
       final fileExt = fileName.split('.').last.toLowerCase();
       if (!['pdf', 'ppt', 'pptx'].contains(fileExt)) {
-        _showSnack('Sirf PDF aur PPT/PPTX files allowed hain!', error: true);
+        _showSnack('Only PDF and PPT/PPTX files are allowed!', error: true);
         return;
       }
 
@@ -568,7 +919,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
         setState(() {
           _uploadedFiles.insert(0, uploadedFile);
         });
-        _showSnack('$fileName upload ho gaya!');
+        _showSnack('$fileName uploaded!');
         // Auto-cast the file to TV after upload
         _castFile(0);
       } else {
@@ -589,7 +940,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
     final fileName = f['name'] as String? ?? 'Document';
 
     if (fileUrl.isEmpty) {
-      _showSnack('File URL nahi mila!', error: true);
+      _showSnack('File URL not found!', error: true);
       return;
     }
 
@@ -599,8 +950,6 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
       _pdfTotalPages = 0;
     });
 
-    // Directly cast the file — TV-side code handles URL changes:
-    // it detects different URL and auto-closes old viewer + loads new PDF
     _doCastFile(fileType, fileUrl, fileName);
   }
 
@@ -613,16 +962,16 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
         'currentPage': 1,
         'totalPages': 0,
       });
-      _showSnack('PDF cast ho raha hai TV pe!');
+      _showSnack('Casting PDF to TV!');
     } else if (fileType == 'pptx') {
       _currentlyCastUrl = fileUrl;
       _emit('cast-pptx', {
         'url': fileUrl,
         'name': fileName,
       });
-      _showSnack('PPT cast ho raha hai TV pe!');
+      _showSnack('Casting PPT to TV!');
     } else {
-      _showSnack('Ye file type supported nahi hai!', error: true);
+      _showSnack('This file type is not supported!', error: true);
     }
   }
 
@@ -674,7 +1023,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
       final fileName = pickedFile.name;
       final fileExt = fileName.split('.').last.toLowerCase();
       if (!['jpg', 'jpeg', 'png', 'webp', 'bmp'].contains(fileExt)) {
-        _showSnack('Sirf image files allowed hain (JPG, PNG, WEBP)!', error: true);
+        _showSnack('Only image files are allowed (JPG, PNG, WEBP)!', error: true);
         return;
       }
 
@@ -692,8 +1041,6 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final uploadedUrl = data['url'] as String? ?? '';
 
-        // Build the full URL for the TV to access
-        // Use device IP instead of 127.0.0.1 so TV can access the image
         final ip = _deviceIp == '...' ? '127.0.0.1' : _deviceIp;
         final fullUrl = 'http://$ip:3000$uploadedUrl';
 
@@ -706,7 +1053,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
         });
 
         _emit('update-background', {'url': fullUrl});
-        _showSnack('Background set ho gaya!');
+        _showSnack('Background set!');
       } else {
         _showSnack('Upload fail: ${response.statusCode}', error: true);
       }
@@ -766,6 +1113,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
     _addContentCtrl.dispose();
     _songSearchCtrl.dispose();
     _songTitleCtrl.dispose();
+    _scheduleNameCtrl.dispose();
     for (final c in _songStanzaCtrls) { c.dispose(); }
     super.dispose();
   }
@@ -773,6 +1121,51 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
   // ═══════════════════════════ BUILD ═══════════════════════════
   @override
   Widget build(BuildContext context) {
+    // Full-screen presentation mode (for screen mirroring)
+    if (_isFullScreen) {
+      final content = _getFullScreenContent();
+      final bgImage = _bgUrl;
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(children: [
+          // Background
+          if (bgImage != null) Positioned.fill(
+            child: Image.network(bgImage, fit: BoxFit.cover, color: Colors.black.withOpacity(0.55), colorBlendMode: BlendMode.darken),
+          ),
+          // Gradient overlay
+          Positioned.fill(child: Container(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(colors: [Colors.transparent, Colors.black.withOpacity(0.7)], radius: 1.2),
+            ),
+          )),
+          // Content
+          Center(child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 32),
+            child: Text(
+              content.isNotEmpty ? content : 'BiblePresenter',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: content.isEmpty ? Colors.white24 : Colors.white,
+                fontSize: content.isEmpty ? 20 : (_fontSize.toDouble() * 0.9),
+                fontWeight: FontWeight.w600,
+                height: 1.8,
+                shadows: [Shadow(color: Colors.black.withOpacity(0.9), blurRadius: 20)],
+              ),
+            ),
+          )),
+          // Exit button (top-right, semi-transparent)
+          Positioned(top: 16, right: 16, child: GestureDetector(
+            onTap: _toggleFullScreen,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.close, color: Colors.white54, size: 20),
+            ),
+          )),
+        ]),
+      );
+    }
+
     return Scaffold(
       backgroundColor: kBg,
       appBar: _buildAppBar(),
@@ -816,6 +1209,28 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
       ]),
     ]),
     actions: [
+      // ── Church Logo button ──
+      GestureDetector(
+        onTap: _castLogo,
+        child: Container(
+          margin: const EdgeInsets.only(right: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: kGold.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: kGold.withOpacity(0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset('assets/church_logo.png', width: 22, height: 22),
+              const SizedBox(width: 4),
+              const Text('Logo', style: TextStyle(color: kGold, fontSize: 10, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+      ),
+      // ── Blackout button ──
       TextButton(
         onPressed: _clearScreen,
         child: const Text('Blackout', style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 11, fontWeight: FontWeight.bold)),
@@ -1105,24 +1520,42 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
 
         const SizedBox(height: 10),
 
-        // Add Song button
-        GestureDetector(
-          onTap: _showAddSongModal,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-            decoration: BoxDecoration(
-              color: Colors.green.shade900.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.green.shade800.withOpacity(0.4)),
+        // Add Song button + Schedule button
+        Row(children: [
+          Expanded(child: GestureDetector(
+            onTap: _showAddSongModal,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              decoration: BoxDecoration(
+                color: Colors.green.shade900.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.green.shade800.withOpacity(0.4)),
+              ),
+              child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.add, size: 16, color: Colors.green),
+                SizedBox(width: 6),
+                Text('Add Song', style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600)),
+              ]),
             ),
-            child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.add, size: 16, color: Colors.green),
-              SizedBox(width: 6),
-              Text('Add Song', style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600)),
-            ]),
-          ),
-        ),
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: GestureDetector(
+            onTap: _showCreateScheduleModal,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              decoration: BoxDecoration(
+                color: Colors.purple.shade900.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.purple.shade800.withOpacity(0.4)),
+              ),
+              child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.calendar_today, size: 16, color: Colors.purple),
+                SizedBox(width: 6),
+                Text('Schedule', style: TextStyle(color: Colors.purple, fontSize: 12, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+          )),
+        ]),
 
         const SizedBox(height: 10),
 
@@ -1134,7 +1567,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
             child: Column(children: [
               const Icon(Icons.music_off, size: 28, color: Color(0xFF1a2d45)),
               const SizedBox(height: 8),
-              Text(_songSearchQuery.isEmpty ? 'No songs loaded' : 'Koi song nahi mila', style: const TextStyle(color: kMuted, fontSize: 11)),
+              Text(_songSearchQuery.isEmpty ? 'No songs loaded' : 'No songs found', style: const TextStyle(color: kMuted, fontSize: 11)),
             ]),
           )
         else
@@ -1184,49 +1617,223 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
 
         const SizedBox(height: 10),
 
-        // Selected song preview + stanza control
-        if (selectedSong != null) _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Expanded(child: Text(selectedSong['title'] as String? ?? '', style: const TextStyle(fontWeight: FontWeight.bold, color: kGold, fontSize: 13), overflow: TextOverflow.ellipsis)),
-            Text('${_selectedStanzaIndex + 1} / ${stanzas.length}', style: const TextStyle(color: kAccent, fontFamily: 'monospace', fontSize: 10)),
-          ]),
-          const SizedBox(height: 8),
-          // Stanza preview box
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: kBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: kGold.withOpacity(0.2))),
-            child: Text(currentStanza, style: const TextStyle(color: kText, fontSize: 12, height: 1.6)),
-          ),
-          const SizedBox(height: 10),
-          // Stanza navigation — dot indicators + prev/next
-          if (stanzas.length > 1) Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(stanzas.length, (i) {
-              final isActive = i == _selectedStanzaIndex;
-              return GestureDetector(
-                onTap: () { _selectedStanzaIndex = i; _castSong(); setState(() {}); },
+        // ── Schedule Presentation Mode (active) ──
+        if (_scheduleMode && _activeScheduleIndex >= 0 && _activeScheduleIndex < _schedules.length) ...[
+          _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('SCHEDULE LIVE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.purple, letterSpacing: 1.5)),
+                const SizedBox(height: 4),
+                Text(_schedules[_activeScheduleIndex]['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, color: kGold, fontSize: 13), overflow: TextOverflow.ellipsis),
+              ])),
+              GestureDetector(
+                onTap: _exitScheduleMode,
                 child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: isActive ? 20 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: isActive ? kGold : kBorder,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(color: Colors.red.shade900.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                  child: const Text('Exit', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
                 ),
-              );
+              ),
+            ]),
+            const SizedBox(height: 10),
+            // Current song info
+            Builder(builder: (context) {
+              final songs = _schedules[_activeScheduleIndex]['songs'] as List? ?? [];
+              if (_scheduleSongIndex < songs.length) {
+                final song = songs[_scheduleSongIndex];
+                final schStanzas = List<String>.from(song['stanzas'] ?? []);
+                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('${_scheduleSongIndex + 1}. ${song['title'] ?? ''}', style: const TextStyle(color: kText, fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  Text('Stanza ${_scheduleStanzaIndex + 1} / ${schStanzas.length}', style: const TextStyle(color: kAccent, fontFamily: 'monospace', fontSize: 10)),
+                  if (schStanzas.isNotEmpty && _scheduleStanzaIndex < schStanzas.length) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      width: double.infinity, padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: kBg, borderRadius: BorderRadius.circular(8), border: Border.all(color: kGold.withOpacity(0.2))),
+                      child: Text(schStanzas[_scheduleStanzaIndex], style: const TextStyle(color: kText, fontSize: 11, height: 1.5), maxLines: 4, overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ]);
+              }
+              return const Text('No song', style: TextStyle(color: kMuted, fontSize: 11));
             }),
+            const SizedBox(height: 10),
+            // Navigation: Prev / Cast / Next
+            Row(children: [
+              Expanded(child: _secondaryBtn('Prev', _schedulePrev)),
+              const SizedBox(width: 8),
+              Expanded(child: _primaryBtn('Cast', _castScheduleSong)),
+              const SizedBox(width: 8),
+              Expanded(child: _secondaryBtn('Next', _scheduleNext)),
+            ]),
+            // Song list in schedule
+            const SizedBox(height: 10),
+            Builder(builder: (context) {
+              final songs = _schedules[_activeScheduleIndex]['songs'] as List? ?? [];
+              return Column(children: songs.asMap().entries.map((entry) {
+                final i = entry.key;
+                final s = entry.value;
+                final isActive = i == _scheduleSongIndex;
+                return GestureDetector(
+                  onTap: () { setState(() { _scheduleSongIndex = i; _scheduleStanzaIndex = 0; }); _castScheduleSong(); },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 3),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isActive ? Colors.purple.shade900.withOpacity(0.3) : kBg,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: isActive ? Colors.purple.shade700 : kBorder),
+                    ),
+                    child: Row(children: [
+                      Container(
+                        width: 18, height: 18,
+                        decoration: BoxDecoration(color: isActive ? Colors.purple.shade700 : kBorder, borderRadius: BorderRadius.circular(4)),
+                        child: Center(child: Text('${i + 1}', style: TextStyle(fontSize: 8, color: isActive ? Colors.white : kMuted, fontWeight: FontWeight.bold))),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(s['title'] ?? '', style: TextStyle(fontSize: 10, color: isActive ? kText : kMuted, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                      if (isActive) const Icon(Icons.play_circle, size: 12, color: Colors.purple),
+                    ]),
+                  ),
+                );
+              }).toList());
+            }),
+          ])),
+          const SizedBox(height: 10),
+        ],
+
+        // ── Schedules list (when not in presentation mode) ──
+        if (!_scheduleMode && _schedules.isNotEmpty)
+          _card(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('SCHEDULES', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.purple, letterSpacing: 1.5)),
+                const SizedBox(height: 8),
+                ..._schedules.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final sch = entry.value;
+                  final songs = sch['songs'] as List? ?? [];
+                  final isActive = idx == _activeScheduleIndex;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isActive ? Colors.purple.shade900.withOpacity(0.2) : kBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: isActive ? Colors.purple.shade700.withOpacity(0.5) : kBorder),
+                    ),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(sch['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, color: kText, fontSize: 12), overflow: TextOverflow.ellipsis),
+                          Text('${sch['date'] ?? ''}  •  ${songs.length} songs', style: const TextStyle(color: kMuted, fontSize: 9)),
+                        ])),
+                        // Play button
+                        if (songs.isNotEmpty) GestureDetector(
+                          onTap: () => _startSchedulePresentation(idx),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(color: Colors.purple.shade900.withOpacity(0.3), borderRadius: BorderRadius.circular(8)),
+                            child: const Icon(Icons.play_arrow, size: 16, color: Colors.purple),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        // Add song to schedule
+                        GestureDetector(
+                          onTap: () => _showAddSongToScheduleModal(idx),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(color: kAccent.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+                            child: const Icon(Icons.add, size: 14, color: kAccent),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        // Delete schedule
+                        GestureDetector(
+                          onTap: () => _deleteSchedule(idx),
+                          child: Icon(Icons.delete_outline, size: 14, color: Colors.red.shade400),
+                        ),
+                      ]),
+                      // Show songs in schedule
+                      if (songs.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        ...songs.asMap().entries.map((songEntry) {
+                          final pos = songEntry.key;
+                          final s = songEntry.value;
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(color: kBg3, borderRadius: BorderRadius.circular(4)),
+                            child: Row(children: [
+                              Text('${pos + 1}.', style: const TextStyle(color: kGold, fontSize: 9, fontWeight: FontWeight.bold)),
+                              const SizedBox(width: 6),
+                              Expanded(child: Text(s['title'] ?? '', style: const TextStyle(color: kText, fontSize: 10), overflow: TextOverflow.ellipsis)),
+                              GestureDetector(
+                                onTap: () => _removeSongFromSchedule(idx, pos),
+                                child: Icon(Icons.close, size: 10, color: Colors.red.shade400),
+                              ),
+                            ]),
+                          );
+                        }),
+                      ],
+                    ]),
+                  );
+                }),
+              ],
+            ),
           ),
-          if (stanzas.length > 1) const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: _secondaryBtn('Prev', _selectedStanzaIndex > 0 ? _prevStanza : null)),
-            const SizedBox(width: 8),
-            Expanded(child: _primaryBtn('Cast', _castSong)),
-            const SizedBox(width: 8),
-            Expanded(child: _secondaryBtn('Next', _selectedStanzaIndex < stanzas.length - 1 ? _nextStanza : null)),
-          ]),
-        ])),
+
+        // Selected song preview + stanza control
+        if (selectedSong != null)
+          _card(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Expanded(child: Text(selectedSong['title'] as String? ?? '', style: const TextStyle(fontWeight: FontWeight.bold, color: kGold, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                  Text('${_selectedStanzaIndex + 1} / ${stanzas.length}', style: const TextStyle(color: kAccent, fontFamily: 'monospace', fontSize: 10)),
+                ]),
+                const SizedBox(height: 8),
+                // Stanza preview box
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: kBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: kGold.withOpacity(0.2))),
+                  child: Text(currentStanza, style: const TextStyle(color: kText, fontSize: 12, height: 1.6)),
+                ),
+                const SizedBox(height: 10),
+                // Stanza navigation — dot indicators + prev/next
+                if (stanzas.length > 1) Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(stanzas.length, (i) {
+                    final isActive = i == _selectedStanzaIndex;
+                    return GestureDetector(
+                      onTap: () { _selectedStanzaIndex = i; _castSong(); setState(() {}); },
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        width: isActive ? 20 : 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: isActive ? kGold : kBorder,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                if (stanzas.length > 1) const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(child: _secondaryBtn('Prev', _selectedStanzaIndex > 0 ? _prevStanza : null)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _primaryBtn('Cast', _castSong)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _secondaryBtn('Next', _selectedStanzaIndex < stanzas.length - 1 ? _nextStanza : null)),
+                ]),
+              ],
+            ),
+          ),
       ]),
     );
   }
@@ -1253,7 +1860,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                   IconButton(icon: const Icon(Icons.close, color: kMuted), onPressed: () => Navigator.pop(context)),
                 ]),
                 const SizedBox(height: 12),
-                _inputField(_songTitleCtrl, 'Song Title', 'e.g. Yeshu Tera Naam'),
+                _inputField(_songTitleCtrl, 'Song Title', 'e.g. Amazing Grace'),
                 const SizedBox(height: 12),
                 // Stanza boxes — each has its own labeled box
                 ...List.generate(_songStanzaCtrls.length, (i) {
@@ -1350,6 +1957,134 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
     );
   }
 
+  // ── Create Schedule Modal ──
+  void _showCreateScheduleModal() {
+    _scheduleNameCtrl.clear();
+    _scheduleDate = DateTime.now();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: kBg3,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('Create Schedule', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: kText)),
+                IconButton(icon: const Icon(Icons.close, color: kMuted), onPressed: () => Navigator.pop(context)),
+              ]),
+              const SizedBox(height: 12),
+              _inputField(_scheduleNameCtrl, 'Schedule Name', 'e.g. Sunday Worship'),
+              const SizedBox(height: 12),
+              // Date picker
+              GestureDetector(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _scheduleDate,
+                    firstDate: DateTime(2024),
+                    lastDate: DateTime(2030),
+                    builder: (ctx, child) => Theme(data: ThemeData.dark().copyWith(colorScheme: const ColorScheme.dark(primary: Colors.purple, surface: kBg2)), child: child!),
+                  );
+                  if (picked != null) setModalState(() => _scheduleDate = picked);
+                },
+                child: Container(
+                  width: double.infinity, padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: kBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: kBorder)),
+                  child: Row(children: [
+                    const Icon(Icons.calendar_today, size: 16, color: Colors.purple),
+                    const SizedBox(width: 10),
+                    Text('${_scheduleDate.day}/${_scheduleDate.month}/${_scheduleDate.year}', style: const TextStyle(color: kText, fontSize: 13)),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _primaryBtn('Create Schedule', () => _createSchedule(_scheduleNameCtrl.text, '${_scheduleDate.day}/${_scheduleDate.month}/${_scheduleDate.year}')),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Add Song to Schedule Modal ──
+  void _showAddSongToScheduleModal(int scheduleIdx) {
+    String searchQuery = '';
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: kBg3,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      isScrollControlled: true,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final filteredList = searchQuery.isEmpty
+              ? _allSongs
+              : _allSongs.where((song) {
+                  final title = (song['title'] as String? ?? '').toLowerCase();
+                  return title.contains(searchQuery.toLowerCase());
+                }).toList();
+          return Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('Add Song to Schedule', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: kText)),
+                IconButton(icon: const Icon(Icons.close, color: kMuted), onPressed: () => Navigator.pop(context)),
+              ]),
+              const SizedBox(height: 12),
+              // ── Search Bar ──
+              TextField(
+                style: const TextStyle(color: kText, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: 'Search song by title...',
+                  hintStyle: const TextStyle(color: kMuted, fontSize: 12),
+                  prefixIcon: const Icon(Icons.search, size: 18, color: kAccent),
+                  filled: true, fillColor: kBg,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: kBorder)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: kBorder)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: kAccent)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  suffixIcon: searchQuery.isNotEmpty
+                      ? IconButton(icon: const Icon(Icons.clear, size: 16, color: kMuted), onPressed: () => setModalState(() => searchQuery = ''))
+                      : null,
+                ),
+                onChanged: (val) => setModalState(() => searchQuery = val),
+              ),
+              const SizedBox(height: 8),
+              if (searchQuery.isNotEmpty)
+                Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('${filteredList.length} songs found', style: const TextStyle(color: kMuted, fontSize: 9))),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 280),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: filteredList.length,
+                  itemBuilder: (ctx, i) {
+                    final song = filteredList[i];
+                    final actualIdx = _allSongs.indexOf(song);
+                    return GestureDetector(
+                      onTap: () { _addSongToSchedule(scheduleIdx, actualIdx); Navigator.pop(context); },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(color: kBg, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder)),
+                        child: Row(children: [
+                          const Icon(Icons.music_note, size: 14, color: kGold),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(song['title'] as String? ?? '', style: const TextStyle(color: kText, fontSize: 11, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                          const Icon(Icons.add_circle_outline, size: 16, color: kAccent),
+                        ]),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+
   // ══════════════════ FILES TAB ══════════════════
   Widget _filesTab() => SingleChildScrollView(
     padding: const EdgeInsets.all(14),
@@ -1437,8 +2172,8 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
             child: const Column(children: [
               Icon(Icons.folder_open, size: 28, color: Color(0xFF1a2d45)),
               SizedBox(height: 8),
-              Text('Koi file upload nahi ki hai', style: TextStyle(color: kMuted, fontSize: 11)),
-              Text('PDF ya PPT upload karke TV pe dikhao', style: TextStyle(color: Color(0xFF1a2d45), fontSize: 9)),
+              Text('No files uploaded yet', style: TextStyle(color: kMuted, fontSize: 11)),
+              Text('Upload PDF or PPT to display on TV', style: TextStyle(color: Color(0xFF1a2d45), fontSize: 9)),
             ]),
           )
         else
@@ -1565,7 +2300,6 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
           child: ClipRRect(
             borderRadius: BorderRadius.circular(5),
             child: Stack(children: [
-              // PDF first page rendered via server URL
               Center(
                 child: Image.asset(
                   'assets/icon/app_icon.png',
@@ -1573,7 +2307,6 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                   errorBuilder: (_, __, ___) => const Icon(Icons.picture_as_pdf, size: 24, color: Colors.red),
                 ),
               ),
-              // PDF label overlay
               Positioned(
                 bottom: 0, left: 0, right: 0,
                 child: Container(
@@ -1784,6 +2517,30 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                 ]),
               ),
             )),
+            // Animated backgrounds
+            ..._animBgs.map((bg) => GestureDetector(
+              onTap: () {
+                setState(() => _bgUrl = bg['id']);
+                _emit('update-background', {'url': bg['id']});
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _bgUrl == bg['id'] ? Colors.purple : kBorder, width: _bgUrl == bg['id'] ? 2 : 1),
+                  gradient: bg['id'] == 'animated:aurora' ? const LinearGradient(colors: [Color(0xFF0a0a2e), Color(0xFF1a0a3e), Color(0xFF0a2a4e)])
+                    : bg['id'] == 'animated:divine' ? const LinearGradient(colors: [Color(0xFF1a1a0a), Color(0xFF0a0a0f)])
+                    : bg['id'] == 'animated:sunset' ? const LinearGradient(colors: [Color(0xFF1a0a0a), Color(0xFF2a1a0a), Color(0xFF0a0a2a)])
+                    : bg['id'] == 'animated:ocean' ? const LinearGradient(colors: [Color(0xFF0a1a2a), Color(0xFF0a2a3a)])
+                    : const LinearGradient(colors: [Color(0xFF0a0a0a), Color(0xFF1a0a0a)]),
+                ),
+                alignment: Alignment.bottomLeft,
+                padding: const EdgeInsets.all(8),
+                child: Row(children: [
+                  Expanded(child: Text(bg['name']!, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white))),
+                  if (_bgUrl == bg['id']) const Icon(Icons.check_circle, size: 12, color: Colors.purple),
+                ]),
+              ),
+            )),
           ],
         ),
       ])),
@@ -1829,6 +2586,27 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
         ),
       ])),
       const SizedBox(width: 8),
+      // Cast button
+      GestureDetector(
+        onTap: _showCastDialog,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: kAccent.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: kAccent.withOpacity(0.4)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.cast, size: 12, color: kAccent),
+            const SizedBox(width: 4),
+            const Text(
+              'Cast',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kAccent),
+            ),
+          ]),
+        ),
+      ),
+      const SizedBox(width: 6),
       GestureDetector(
         onTap: _copyUrl,
         child: Container(
