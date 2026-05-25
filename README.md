@@ -88,7 +88,7 @@ BiblePresenter turns your Android phone into a church presentation controller. I
 ```bash
 # Clone the repository
 git clone https://github.com/udayrajsaroj/Bible-Presenter.git
-cd BiblePresenter
+cd Bible-Presenter
 
 # Get dependencies
 flutter pub get
