@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
-import 'dart:isolate';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -144,6 +144,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
 
   // ── Cast / Full-screen state ──
   bool _isFullScreen = false;
+  bool _showFullScreenControls = false;
   static const _screenCastChannel = MethodChannel('biblepresenter/screencast');
 
   @override
@@ -515,8 +516,10 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
     if (songs.isEmpty) return;
     final currentStanzas = List<String>.from(songs[_scheduleSongIndex]['stanzas'] ?? []);
     if (_scheduleStanzaIndex < currentStanzas.length - 1) {
+      // Next stanza in same song
       _scheduleStanzaIndex++;
     } else if (_scheduleSongIndex < songs.length - 1) {
+      // Next song, first stanza
       _scheduleSongIndex++;
       _scheduleStanzaIndex = 0;
     }
@@ -529,8 +532,10 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
     final songs = _schedules[_activeScheduleIndex]['songs'] as List? ?? [];
     if (songs.isEmpty) return;
     if (_scheduleStanzaIndex > 0) {
+      // Prev stanza in same song
       _scheduleStanzaIndex--;
     } else if (_scheduleSongIndex > 0) {
+      // Prev song, last stanza
       _scheduleSongIndex--;
       final prevStanzas = List<String>.from(songs[_scheduleSongIndex]['stanzas'] ?? []);
       _scheduleStanzaIndex = prevStanzas.length > 0 ? prevStanzas.length - 1 : 0;
@@ -589,12 +594,16 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
     try {
       await _screenCastChannel.invokeMethod('openScreenMirror');
     } on PlatformException {
+      // Fallback: just show instructions
       _showSnack('Turn on Screencast from phone quick settings', error: false);
     }
   }
 
   void _toggleFullScreen() {
-    setState(() => _isFullScreen = !_isFullScreen);
+    setState(() {
+      _isFullScreen = !_isFullScreen;
+      _showFullScreenControls = false;
+    });
     if (_isFullScreen) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       SystemChrome.setPreferredOrientations([
@@ -681,7 +690,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
           ),
           const SizedBox(height: 10),
 
-          // Option 3: Browser on TV
+          // Option 2: Browser on TV
           GestureDetector(
             onTap: () {
               Navigator.pop(context);
@@ -725,9 +734,11 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('HOW IT WORKS:', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: kGold, letterSpacing: 1.5)),
               const SizedBox(height: 8),
-              _castStep('1', 'Screen Mirror: App enters fullscreen → Cast phone screen to TV'),
+              _castStep('1', 'Tap Screen Mirror → App will enter fullscreen mode'),
               const SizedBox(height: 4),
-              _castStep('2', 'Browser: Copy URL → Open in TV browser'),
+              _castStep('2', 'Phone Screen Cast settings will open automatically'),
+              const SizedBox(height: 4),
+              _castStep('3', 'Select your TV → Phone screen will appear on TV'),
             ]),
           ),
         ]),
@@ -762,6 +773,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                 setState(() {
                   _tvState = Map<String, dynamic>.from(data);
                   _connected = true;
+                  // Track PDF page info from TV state
                   if (data['type'] == 'pdf' && data['content'] != null) {
                     final content = data['content'] as Map<String, dynamic>;
                     _pdfCurrentPage = content['currentPage'] ?? 1;
@@ -885,6 +897,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
       final file = File(filePath);
       final bytes = await file.readAsBytes();
 
+      // Read first page preview for PDF files
       Uint8List? previewBytes;
       if (fileExt == 'pdf') {
         try {
@@ -911,6 +924,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
           _uploadedFiles.insert(0, uploadedFile);
         });
         _showSnack('$fileName uploaded!');
+        // Auto-cast the file to TV after upload
         _castFile(0);
       } else {
         _showSnack('Upload fail: ${response.statusCode}', error: true);
@@ -980,18 +994,35 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
     setState(() {});
   }
 
-  void _deleteUploadedFile(int idx) {
+  Future<void> _deleteUploadedFile(int idx) async {
+    final fileName = _uploadedFiles[idx]['name'] as String? ?? '';
+    final deletedUrl = _uploadedFiles[idx]['url'] as String? ?? '';
+
+    // Delete from server filesystem via DELETE API
+    if (fileName.isNotEmpty) {
+      try {
+        final uri = Uri.parse('http://127.0.0.1:3000/api/upload/${Uri.encodeComponent(fileName)}');
+        await http.delete(uri);
+      } catch (e) {
+        print('[BiblePresenter] Delete API error: $e');
+      }
+    }
+
+    // If the deleted file was being cast, clear TV
+    if (deletedUrl == _currentlyCastUrl) {
+      _currentlyCastUrl = '';
+      _emit('clear-screen', {});
+    }
+
     setState(() {
-      final deletedUrl = _uploadedFiles[idx]['url'] as String? ?? '';
       _uploadedFiles.removeAt(idx);
       if (_activeFileIndex >= _uploadedFiles.length) {
         _activeFileIndex = _uploadedFiles.length - 1;
       }
       if (_activeFileIndex < 0) _activeFileIndex = -1;
-      if (deletedUrl == _currentlyCastUrl) {
-        _currentlyCastUrl = '';
-      }
     });
+
+    _showSnack('File deleted');
   }
 
   // ══════════════════ UPLOAD BACKGROUND IMAGE ══════════════════
@@ -1114,17 +1145,21 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
     if (_isFullScreen) {
       final content = _getFullScreenContent();
       final bgImage = _bgUrl;
+      final type = _tvState['type'] as String? ?? 'idle';
       return Scaffold(
         backgroundColor: Colors.black,
         body: Stack(children: [
-          if (bgImage != null && !bgImage.startsWith('animated:')) Positioned.fill(
+          // Background
+          if (bgImage != null) Positioned.fill(
             child: Image.network(bgImage, fit: BoxFit.cover, color: Colors.black.withOpacity(0.55), colorBlendMode: BlendMode.darken),
           ),
+          // Gradient overlay
           Positioned.fill(child: Container(
             decoration: BoxDecoration(
               gradient: RadialGradient(colors: [Colors.transparent, Colors.black.withOpacity(0.7)], radius: 1.2),
             ),
           )),
+          // Content
           Center(child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 32),
             child: Text(
@@ -1139,8 +1174,166 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
               ),
             ),
           )),
-          // Floating controller overlay for fullscreen
-          Positioned(top: 16, right: 16, child: _buildFullScreenControls()),
+
+          // ── Floating toggle button (always visible, bottom-center) ──
+          Positioned(
+            bottom: 20,
+            left: 0, right: 0,
+            child: Center(child: GestureDetector(
+              onTap: () => setState(() => _showFullScreenControls = !_showFullScreenControls),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white24, width: 1),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(_showFullScreenControls ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                    color: Colors.white54, size: 18),
+                  const SizedBox(width: 4),
+                  Text(_showFullScreenControls ? 'Hide Controls' : 'Show Controls',
+                    style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            )),
+          ),
+
+          // ── Floating controller overlay ──
+          if (_showFullScreenControls) Positioned(
+            bottom: 64,
+            left: 12, right: 12,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0a0f1e).withOpacity(0.95),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF1a2d45), width: 1.5),
+              ),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                // Current type indicator
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: kAccent.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(type == 'verse' ? Icons.menu_book : type == 'slide' ? Icons.slideshow :
+                      type == 'song' ? Icons.music_note : type == 'logo' ? Icons.image :
+                      type == 'pdf' ? Icons.picture_as_pdf : Icons.tv,
+                      size: 14, color: kAccent),
+                    const SizedBox(width: 6),
+                    Text(type.toUpperCase(),
+                      style: const TextStyle(color: kAccent, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  ]),
+                ),
+                const SizedBox(height: 10),
+
+                // Quick action row: Blackout + Logo
+                Row(children: [
+                  Expanded(child: GestureDetector(
+                    onTap: _clearScreen,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade900.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.shade800.withOpacity(0.4)),
+                      ),
+                      child: const Center(child: Text('Blackout',
+                        style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold))),
+                    ),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: GestureDetector(
+                    onTap: _castLogo,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: kGold.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: kGold.withOpacity(0.3)),
+                      ),
+                      child: const Center(child: Text('Logo',
+                        style: TextStyle(color: kGold, fontSize: 11, fontWeight: FontWeight.bold))),
+                    ),
+                  )),
+                ]),
+                const SizedBox(height: 8),
+
+                // Navigation row: Prev / Cast Current / Next
+                Row(children: [
+                  Expanded(child: GestureDetector(
+                    onTap: () {
+                      if (type == 'verse') _prevVerse();
+                      else if (type == 'slide' && _activeSlide > 0) _castSlide(_activeSlide - 1);
+                      else if (type == 'song') _prevStanza();
+                      else if (type == 'pdf') _pdfPrevPage();
+                      else if (type == 'song' && _scheduleMode) _schedulePrev();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: kBorder,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Center(child: Text('Prev',
+                        style: TextStyle(color: kText, fontSize: 12, fontWeight: FontWeight.bold))),
+                    ),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: GestureDetector(
+                    onTap: () {
+                      if (type == 'verse') _castVerse();
+                      else if (type == 'slide') _castSlide(_activeSlide);
+                      else if (type == 'song') _castSong();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: kAccent,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [BoxShadow(color: kAccent.withOpacity(0.3), blurRadius: 8)],
+                      ),
+                      child: const Center(child: Text('Cast',
+                        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))),
+                    ),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: GestureDetector(
+                    onTap: () {
+                      if (type == 'verse') _nextVerse();
+                      else if (type == 'slide' && _activeSlide < _slides.length - 1) _castSlide(_activeSlide + 1);
+                      else if (type == 'song') _nextStanza();
+                      else if (type == 'pdf') _pdfNextPage();
+                      else if (type == 'song' && _scheduleMode) _scheduleNext();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: kBorder,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Center(child: Text('Next',
+                        style: TextStyle(color: kText, fontSize: 12, fontWeight: FontWeight.bold))),
+                    ),
+                  )),
+                ],
+              ),
+              ]),
+            ),
+          ),
+
+          // Exit button (top-right, semi-transparent)
+          Positioned(top: 16, right: 16, child: GestureDetector(
+            onTap: _toggleFullScreen,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.close, color: Colors.white54, size: 20),
+            ),
+          )),
         ]),
       );
     }
@@ -1158,50 +1351,6 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
         ),
         _bottomUrlBar(),
       ]),
-    );
-  }
-
-  // ── Fullscreen floating controller ──
-  Widget _buildFullScreenControls() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.black87,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        _fsCtrlBtn(Icons.close, 'Exit', _toggleFullScreen),
-        const SizedBox(width: 4),
-        _fsCtrlBtn(Icons.skip_previous, 'Prev', () {
-          if (_tvState['type'] == 'song') _prevStanza();
-          if (_tvState['type'] == 'verse') _prevVerse();
-          if (_tvState['type'] == 'pdf') _pdfPrevPage();
-        }),
-        const SizedBox(width: 4),
-        _fsCtrlBtn(Icons.skip_next, 'Next', () {
-          if (_tvState['type'] == 'song') _nextStanza();
-          if (_tvState['type'] == 'verse') _nextVerse();
-          if (_tvState['type'] == 'pdf') _pdfNextPage();
-        }),
-        const SizedBox(width: 4),
-        _fsCtrlBtn(Icons.cast, 'Cast', _showCastDialog),
-        const SizedBox(width: 4),
-        _fsCtrlBtn(Icons.dark_mode, 'Black', _clearScreen),
-        const SizedBox(width: 4),
-        _fsCtrlBtn(Icons.image, 'Logo', _castLogo),
-      ]),
-    );
-  }
-
-  Widget _fsCtrlBtn(IconData icon, String tooltip, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(6)),
-        child: Icon(icon, color: Colors.white70, size: 16),
-      ),
     );
   }
 
@@ -1464,6 +1613,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
           Expanded(child: _secondaryBtn('Next', _nextVerse)),
         ]),
         const SizedBox(height: 10),
+        // Font size control in Bible tab
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           _label('FONT SIZE'),
           Text('$_fontSize px', style: const TextStyle(color: kAccent, fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 10)),
@@ -1581,7 +1731,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
 
         const SizedBox(height: 10),
 
-        // Song list
+        // Song list (show limited results)
         if (_filteredSongs.isEmpty)
           Container(
             width: double.infinity,
@@ -1658,6 +1808,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
               ),
             ]),
             const SizedBox(height: 10),
+            // Current song info
             Builder(builder: (context) {
               final songs = _schedules[_activeScheduleIndex]['songs'] as List? ?? [];
               if (_scheduleSongIndex < songs.length) {
@@ -1680,6 +1831,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
               return const Text('No song', style: TextStyle(color: kMuted, fontSize: 11));
             }),
             const SizedBox(height: 10),
+            // Navigation: Prev / Cast / Next
             Row(children: [
               Expanded(child: _secondaryBtn('Prev', _schedulePrev)),
               const SizedBox(width: 8),
@@ -1687,6 +1839,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
               const SizedBox(width: 8),
               Expanded(child: _secondaryBtn('Next', _scheduleNext)),
             ]),
+            // Song list in schedule
             const SizedBox(height: 10),
             Builder(builder: (context) {
               final songs = _schedules[_activeScheduleIndex]['songs'] as List? ?? [];
@@ -1749,6 +1902,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                           Text(sch['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, color: kText, fontSize: 12), overflow: TextOverflow.ellipsis),
                           Text('${sch['date'] ?? ''}  •  ${songs.length} songs', style: const TextStyle(color: kMuted, fontSize: 9)),
                         ])),
+                        // Play button
                         if (songs.isNotEmpty) GestureDetector(
                           onTap: () => _startSchedulePresentation(idx),
                           child: Container(
@@ -1758,6 +1912,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                           ),
                         ),
                         const SizedBox(width: 6),
+                        // Add song to schedule
                         GestureDetector(
                           onTap: () => _showAddSongToScheduleModal(idx),
                           child: Container(
@@ -1767,11 +1922,13 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                           ),
                         ),
                         const SizedBox(width: 6),
+                        // Delete schedule
                         GestureDetector(
                           onTap: () => _deleteSchedule(idx),
                           child: Icon(Icons.delete_outline, size: 14, color: Colors.red.shade400),
                         ),
                       ]),
+                      // Show songs in schedule
                       if (songs.isNotEmpty) ...[
                         const SizedBox(height: 6),
                         ...songs.asMap().entries.map((songEntry) {
@@ -1811,6 +1968,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                   Text('${_selectedStanzaIndex + 1} / ${stanzas.length}', style: const TextStyle(color: kAccent, fontFamily: 'monospace', fontSize: 10)),
                 ]),
                 const SizedBox(height: 8),
+                // Stanza preview box
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
@@ -1818,6 +1976,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                   child: Text(currentStanza, style: const TextStyle(color: kText, fontSize: 12, height: 1.6)),
                 ),
                 const SizedBox(height: 10),
+                // Stanza navigation — dot indicators + prev/next
                 if (stanzas.length > 1) Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(stanzas.length, (i) {
@@ -1852,6 +2011,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
   }
 
   void _showAddSongModal() {
+    // Reset stanza controllers for fresh entry — start with 2 stanza boxes
     for (final c in _songStanzaCtrls) { c.dispose(); }
     _songStanzaCtrls = [TextEditingController(), TextEditingController()];
     _songTitleCtrl.clear();
@@ -1874,6 +2034,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                 const SizedBox(height: 12),
                 _inputField(_songTitleCtrl, 'Song Title', 'e.g. Amazing Grace'),
                 const SizedBox(height: 12),
+                // Stanza boxes — each has its own labeled box
                 ...List.generate(_songStanzaCtrls.length, (i) {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 10),
@@ -1937,6 +2098,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                     ]),
                   );
                 }),
+                // Add Stanza button
                 GestureDetector(
                   onTap: () {
                     _songStanzaCtrls.add(TextEditingController());
@@ -1987,6 +2149,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
               const SizedBox(height: 12),
               _inputField(_scheduleNameCtrl, 'Schedule Name', 'e.g. Sunday Worship'),
               const SizedBox(height: 12),
+              // Date picker
               GestureDetector(
                 onTap: () async {
                   final picked = await showDatePicker(
@@ -2041,6 +2204,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                 IconButton(icon: const Icon(Icons.close, color: kMuted), onPressed: () => Navigator.pop(context)),
               ]),
               const SizedBox(height: 12),
+              // ── Search Bar ──
               TextField(
                 style: const TextStyle(color: kText, fontSize: 13),
                 decoration: InputDecoration(
@@ -2097,6 +2261,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
   Widget _filesTab() => SingleChildScrollView(
     padding: const EdgeInsets.all(14),
     child: Column(children: [
+      // Upload button
       _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _label('UPLOAD PDF / PPT'),
         const SizedBox(height: 10),
@@ -2138,6 +2303,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
 
       const SizedBox(height: 12),
 
+      // PDF page navigation (visible when PDF is being cast)
       if (_tvState['type'] == 'pdf') _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _label('PDF PAGE CONTROL'),
         const SizedBox(height: 10),
@@ -2162,6 +2328,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
 
       const SizedBox(height: 12),
 
+      // Uploaded files list
       _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           _label('UPLOADED FILES'),
@@ -2203,21 +2370,48 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
               ),
               child: Column(children: [
                 Row(children: [
+                  // Preview thumbnail
                   _buildFilePreview(fileType, localPath, isActive),
                   const SizedBox(width: 10),
+
+                  // File info
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(fileName, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isActive ? kText : kMuted), overflow: TextOverflow.ellipsis),
+                    Text(
+                      fileName,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isActive ? kText : kMuted,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 2),
                     Row(children: [
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: _fileColor(fileType).withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
-                        child: Text(isPdf ? 'PDF' : (isPpt ? 'PPT' : 'FILE'), style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: _fileColor(fileType), letterSpacing: 0.5)),
+                        decoration: BoxDecoration(
+                          color: _fileColor(fileType).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          isPdf ? 'PDF' : (isPpt ? 'PPT' : 'FILE'),
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            color: _fileColor(fileType),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 8),
-                      Text(_formatFileSize(fileSize), style: const TextStyle(fontSize: 9, color: kMuted, fontFamily: 'monospace')),
+                      Text(
+                        _formatFileSize(fileSize),
+                        style: const TextStyle(fontSize: 9, color: kMuted, fontFamily: 'monospace'),
+                      ),
                     ]),
                   ])),
+
+                  // Cast / Active indicator
                   if (isActive)
                     const Icon(Icons.cast, size: 16, color: kAccent)
                   else
@@ -2225,22 +2419,34 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                       onTap: () => _castFile(idx),
                       child: Container(
                         padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(color: kAccent.withOpacity(0.15), borderRadius: BorderRadius.circular(8), border: Border.all(color: kAccent.withOpacity(0.3))),
+                        decoration: BoxDecoration(
+                          color: kAccent.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: kAccent.withOpacity(0.3)),
+                        ),
                         child: const Icon(Icons.cast, size: 16, color: kAccent),
                       ),
                     ),
+
                   const SizedBox(width: 6),
+
+                  // Delete button
                   GestureDetector(
                     onTap: () => _deleteUploadedFile(idx),
                     child: Icon(Icons.delete_outline, size: 16, color: Colors.red.shade400),
                   ),
                 ]),
+
+                // Cast button for non-active files
                 if (!isActive)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: SizedBox(
                       width: double.infinity,
-                      child: _castFileBtn(isPdf ? 'Cast PDF to TV' : 'Cast PPT to TV', () => _castFile(idx)),
+                      child: _castFileBtn(
+                        isPdf ? 'Cast PDF to TV' : 'Cast PPT to TV',
+                        () => _castFile(idx),
+                      ),
                     ),
                   ),
               ]),
@@ -2250,43 +2456,80 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
     ]),
   );
 
+  // ── File preview widget ──
   Widget _buildFilePreview(String fileType, String localPath, bool isActive) {
     if (fileType == 'pdf' && localPath.isNotEmpty) {
       final file = File(localPath);
       if (file.existsSync()) {
         return Container(
-          width: 52, height: 68,
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), border: Border.all(color: isActive ? kAccent.withOpacity(0.5) : kBorder)),
+          width: 52,
+          height: 68,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: isActive ? kAccent.withOpacity(0.5) : kBorder),
+          ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(5),
             child: Stack(children: [
-              Center(child: Image.asset('assets/icon/app_icon.png', width: 24, height: 24, errorBuilder: (_, __, ___) => const Icon(Icons.picture_as_pdf, size: 24, color: Colors.red))),
-              Positioned(bottom: 0, left: 0, right: 0, child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 2), color: Colors.red.shade700,
-                child: const Text('PDF', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-              )),
+              Center(
+                child: Image.asset(
+                  'assets/icon/app_icon.png',
+                  width: 24, height: 24,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.picture_as_pdf, size: 24, color: Colors.red),
+                ),
+              ),
+              Positioned(
+                bottom: 0, left: 0, right: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  color: Colors.red.shade700,
+                  child: const Text(
+                    'PDF',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  ),
+                ),
+              ),
             ]),
           ),
         );
       }
     }
+
     if (fileType == 'pptx') {
       return Container(
-        width: 52, height: 68,
+        width: 52,
+        height: 68,
         decoration: BoxDecoration(
-          gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFD04423), Color(0xFFF07030)]),
-          borderRadius: BorderRadius.circular(6), border: Border.all(color: isActive ? kAccent.withOpacity(0.5) : kBorder),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFD04423), Color(0xFFF07030)],
+          ),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: isActive ? kAccent.withOpacity(0.5) : kBorder),
         ),
-        child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.slideshow, size: 22, color: Colors.white),
-          SizedBox(height: 2),
-          Text('PPT', style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-        ]),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.slideshow, size: 22, color: Colors.white),
+            SizedBox(height: 2),
+            Text('PPT', style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+          ],
+        ),
       );
     }
+
+    // Default file icon
     return Container(
-      width: 52, height: 68,
-      decoration: BoxDecoration(color: kBg2, borderRadius: BorderRadius.circular(6), border: Border.all(color: isActive ? kAccent.withOpacity(0.5) : kBorder)),
+      width: 52,
+      height: 68,
+      decoration: BoxDecoration(
+        color: kBg2,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: isActive ? kAccent.withOpacity(0.5) : kBorder),
+      ),
       child: const Icon(Icons.insert_drive_file, size: 22, color: kMuted),
     );
   }
@@ -2295,13 +2538,20 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
     onTap: onTap,
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 9),
-      decoration: BoxDecoration(color: kAccent.withOpacity(0.12), borderRadius: BorderRadius.circular(8), border: Border.all(color: kAccent.withOpacity(0.3))),
+      decoration: BoxDecoration(
+        color: kAccent.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: kAccent.withOpacity(0.3)),
+      ),
       alignment: Alignment.center,
-      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Icon(Icons.cast, size: 13, color: kAccent),
-        const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kAccent, letterSpacing: 0.3)),
-      ]),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.cast, size: 13, color: kAccent),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kAccent, letterSpacing: 0.3)),
+        ],
+      ),
     ),
   );
 
@@ -2331,12 +2581,17 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
       _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _label('TV BACKGROUND'),
         const SizedBox(height: 12),
+        // Upload custom background button
         GestureDetector(
           onTap: _isUploadingBg ? null : _uploadBgImage,
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-            decoration: BoxDecoration(color: kBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: kAccent.withOpacity(0.3), width: 1.5)),
+            decoration: BoxDecoration(
+              color: kBg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: kAccent.withOpacity(0.3), width: 1.5),
+            ),
             child: _isUploadingBg
                 ? const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                     SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: kAccent, strokeWidth: 2)),
@@ -2362,11 +2617,16 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
             GestureDetector(
               onTap: () { setState(() => _bgUrl = null); _emit('update-background', {}); },
               child: Container(
-                decoration: BoxDecoration(color: kBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: _bgUrl == null ? kAccent : kBorder, width: _bgUrl == null ? 2 : 1)),
+                decoration: BoxDecoration(
+                  color: kBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _bgUrl == null ? kAccent : kBorder, width: _bgUrl == null ? 2 : 1),
+                ),
                 alignment: Alignment.center,
                 child: Text('None', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _bgUrl == null ? kAccent : kMuted)),
               ),
             ),
+            // Uploaded backgrounds (with delete button)
             ..._uploadedBgs.asMap().entries.map((entry) {
               final bgIdx = entry.key;
               final bg = entry.value;
@@ -2389,19 +2649,37 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                     if (isSelected) const Icon(Icons.check_circle, size: 12, color: kAccent),
                     const SizedBox(width: 4),
                     GestureDetector(
-                      onTap: () {
+                      onTap: () async {
+                        // Delete from server filesystem
+                        final bgName = bg['name'] ?? '';
+                        if (bgName.isNotEmpty) {
+                          try {
+                            final uri = Uri.parse('http://127.0.0.1:3000/api/upload/${Uri.encodeComponent(bgName)}');
+                            await http.delete(uri);
+                          } catch (e) {
+                            print('[BiblePresenter] BG delete API error: $e');
+                          }
+                        }
                         setState(() {
-                          if (_bgUrl == bg['url']) { _bgUrl = null; _emit('update-background', {}); }
+                          if (_bgUrl == bg['url']) {
+                            _bgUrl = null;
+                            _emit('update-background', {});
+                          }
                           _uploadedBgs.removeAt(bgIdx);
                         });
                         _showSnack('Background deleted');
                       },
-                      child: Container(padding: const EdgeInsets.all(3), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)), child: const Icon(Icons.delete_outline, size: 11, color: Color(0xFFFCA5A5))),
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
+                        child: const Icon(Icons.delete_outline, size: 11, color: Color(0xFFFCA5A5)),
+                      ),
                     ),
                   ]),
                 ),
               );
             }),
+            // Preset backgrounds
             ..._presetBgs.map((bg) => GestureDetector(
               onTap: () {
                 setState(() => _bgUrl = bg['url']);
@@ -2421,6 +2699,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                 ]),
               ),
             )),
+            // Animated backgrounds
             ..._animBgs.map((bg) => GestureDetector(
               onTap: () {
                 setState(() => _bgUrl = bg['id']);
@@ -2482,18 +2761,30 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('TV CASTING URL', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: kMuted, letterSpacing: 1.5)),
         const SizedBox(height: 2),
-        Text('http://$_deviceIp:3000/tv.html', style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: kAccent), overflow: TextOverflow.ellipsis),
+        Text(
+          'http://$_deviceIp:3000/tv.html',
+          style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: kAccent),
+          overflow: TextOverflow.ellipsis,
+        ),
       ])),
       const SizedBox(width: 8),
+      // Cast button
       GestureDetector(
         onTap: _showCastDialog,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(color: kAccent.withOpacity(0.15), borderRadius: BorderRadius.circular(8), border: Border.all(color: kAccent.withOpacity(0.4))),
+          decoration: BoxDecoration(
+            color: kAccent.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: kAccent.withOpacity(0.4)),
+          ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             const Icon(Icons.cast, size: 12, color: kAccent),
             const SizedBox(width: 4),
-            const Text('Cast', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kAccent)),
+            const Text(
+              'Cast',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kAccent),
+            ),
           ]),
         ),
       ),

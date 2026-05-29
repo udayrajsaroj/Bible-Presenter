@@ -80,7 +80,7 @@ Future<void> startServer(dynamic message) async {
   Response _cors(Response response) {
     return response.change(headers: {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     });
   }
@@ -162,18 +162,47 @@ Future<void> startServer(dynamic message) async {
     }
   });
 
+  // ── Delete uploaded file ──
+  router.delete('/api/upload/<filename>', (Request req, String filename) async {
+    try {
+      // Only remove path traversal (..) and take basename, preserve dots in filename
+      final safeName = filename.replaceAll('..', '').split('/').last;
+      final file = File('$_uploadDir/$safeName');
+      if (await file.exists()) {
+        await file.delete();
+        print('[Server] File deleted: $safeName');
+        return _cors(Response.ok(
+          jsonEncode({'deleted': true, 'name': safeName}),
+          headers: {'Content-Type': 'application/json'},
+        ));
+      }
+      return _cors(Response.notFound(
+        jsonEncode({'error': 'File not found'}),
+        headers: {'Content-Type': 'application/json'},
+      ));
+    } catch (e) {
+      print('[Server] Delete error: $e');
+      return _cors(Response.internalServerError(
+        body: jsonEncode({'error': e.toString()}),
+        headers: {'Content-Type': 'application/json'},
+      ));
+    }
+  });
+
   // ── Serve uploaded files ──
   router.get('/uploads/<filename>', (Request req, String filename) async {
     try {
-      final file = File('$_uploadDir/$filename');
+      // Sanitize: remove path traversal and take basename only
+      final safeName = filename.replaceAll('..', '').split('/').last;
+      final file = File('$_uploadDir/$safeName');
       if (!await file.exists()) {
         return Response.notFound('File not found');
       }
       final bytes = await file.readAsBytes();
       return Response.ok(bytes, headers: {
-        'Content-Type': _contentType(filename),
+        'Content-Type': _contentType(safeName),
         'Access-Control-Allow-Origin': '*',
-        'Content-Disposition': 'inline; filename="$filename"',
+        'Content-Disposition': 'inline; filename="$safeName"',
         'Cache-Control': 'no-cache',
       });
     } catch (e) {
