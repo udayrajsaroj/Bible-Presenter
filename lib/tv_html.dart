@@ -408,6 +408,21 @@ const String tvHtmlContent = r'''
     }
     #page-indicator.active {
       display: block;
+      animation: pageIndicatorFade 3s ease forwards;
+    }
+    @keyframes pageIndicatorFade {
+      0%   { opacity: 1; }
+      70%  { opacity: 1; }
+      100% { opacity: 0; pointer-events: none; }
+    }
+    #page-indicator.peek {
+      animation: pageIndicatorPeek 2s ease forwards;
+    }
+    @keyframes pageIndicatorPeek {
+      0%   { opacity: 0; }
+      10%  { opacity: 1; }
+      70%  { opacity: 1; }
+      100% { opacity: 0; pointer-events: none; }
     }
     #doc-loading {
       position: fixed; inset: 0; z-index: 56;
@@ -509,11 +524,9 @@ const String tvHtmlContent = r'''
         letter-spacing: 0.25em;
       }
 
-      /* Page indicator smaller on mobile */
+      /* Hide page indicator on mobile — mobile nav already shows page info */
       #page-indicator {
-        bottom: 12px;
-        font-size: 9px;
-        padding: 4px 14px;
+        display: none !important;
       }
 
       /* Doc loading spinner smaller on mobile */
@@ -851,7 +864,12 @@ const String tvHtmlContent = r'''
 
       await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
 
-      document.getElementById('page-indicator').textContent = num + ' / ' + pdfTotalPages;
+      const pageInd = document.getElementById('page-indicator');
+      pageInd.textContent = num + ' / ' + pdfTotalPages;
+      // Show briefly then auto-hide (peek animation)
+      pageInd.classList.remove('peek');
+      void pageInd.offsetWidth; // force reflow to restart animation
+      pageInd.classList.add('peek');
     } catch (e) {
       console.error('[TV] PDF render error:', e);
     }
