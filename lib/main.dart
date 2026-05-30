@@ -776,8 +776,11 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
                   // Track PDF page info from TV state
                   if (data['type'] == 'pdf' && data['content'] != null) {
                     final content = data['content'] as Map<String, dynamic>;
-                    _pdfCurrentPage = content['currentPage'] ?? 1;
-                    _pdfTotalPages = content['totalPages'] ?? 0;
+                    _pdfCurrentPage = content['currentPage'] ?? _pdfCurrentPage;
+                    // Always accept totalPages when available (fixes race condition)
+                    if (content['totalPages'] != null && (content['totalPages'] as int) > 0) {
+                      _pdfTotalPages = content['totalPages'];
+                    }
                   }
                 });
               }
@@ -988,7 +991,11 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
   }
 
   void _pdfNextPage() {
+    // If we already know total pages, don't go beyond it
     if (_pdfTotalPages > 0 && _pdfCurrentPage >= _pdfTotalPages) return;
+    // Safety: even if totalPages not yet reported, don't go beyond a reasonable limit
+    // (TV will simply fail to render non-existent pages)
+    if (_pdfCurrentPage >= 999) return;
     _pdfCurrentPage++;
     _emit('pdf-page', {'page': _pdfCurrentPage});
     setState(() {});
@@ -2320,7 +2327,7 @@ class _ControllerPageState extends State<ControllerPage> with TickerProviderStat
             Row(children: [
               Expanded(child: _secondaryBtn('Prev Page', _pdfCurrentPage > 1 ? _pdfPrevPage : null)),
               const SizedBox(width: 8),
-              Expanded(child: _secondaryBtn('Next Page', (_pdfTotalPages == 0 || _pdfCurrentPage < _pdfTotalPages) ? _pdfNextPage : null)),
+              Expanded(child: _secondaryBtn('Next Page', (_pdfTotalPages > 0 && _pdfCurrentPage >= _pdfTotalPages) ? null : _pdfNextPage)),
             ]),
           ]),
         ),

@@ -3,7 +3,7 @@ const String tvHtmlContent = r'''
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
   <title>BiblePresenter — TV</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Pro:ital,wght@0,300;0,600;1,300;1,600&family=Tiro+Devanagari+Hindi:ital@0;1&display=swap" rel="stylesheet">
@@ -15,12 +15,13 @@ const String tvHtmlContent = r'''
       --gold-light: #e8d5a3;
       --ink: #0a0a0f;
     }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body {
       background: var(--ink);
       font-family: 'Crimson Pro', Georgia, serif;
       overflow: hidden;
       width: 100vw; height: 100vh;
+      touch-action: manipulation;
     }
 
     body::before {
@@ -437,6 +438,203 @@ const String tvHtmlContent = r'''
       color: rgba(255,255,255,0.3);
       text-transform: uppercase;
     }
+
+    /* ════════════════════════════════════════════════════════
+       MOBILE RESPONSIVE — screens below 768px
+       ════════════════════════════════════════════════════════ */
+    @media (max-width: 768px) {
+      body {
+        -webkit-text-size-adjust: 100%;
+      }
+
+      #stage {
+        padding: 2vh 4vw;
+      }
+
+      /* Smaller badges on mobile */
+      #status-badge {
+        top: 10px; right: 10px;
+        font-size: 7px;
+        padding: 4px 10px;
+        gap: 5px;
+      }
+      #status-dot {
+        width: 5px; height: 5px;
+      }
+      #brand-badge {
+        top: 10px; left: 10px;
+        font-size: 7px;
+        gap: 5px;
+      }
+      #brand-badge::before {
+        width: 5px; height: 5px;
+      }
+
+      /* Ornament smaller on mobile */
+      .ornament {
+        margin: 12px 0;
+        font-size: 14px;
+        gap: 10px;
+      }
+      .ornament::before, .ornament::after {
+        max-width: 60px;
+      }
+
+      /* Verse reference smaller on mobile */
+      .verse-ref {
+        font-size: clamp(10px, 3.5vw, 16px);
+        letter-spacing: 0.2em;
+      }
+
+      /* Song counter smaller on mobile */
+      .song-stanza-counter {
+        font-size: 9px;
+        margin-top: 8px;
+      }
+
+      /* Slide subtitle smaller on mobile */
+      .slide-subtitle {
+        font-size: clamp(8px, 2.5vw, 12px);
+        margin-bottom: 10px;
+      }
+
+      /* Idle screen smaller cross on mobile */
+      .idle-cross {
+        width: 44px; height: 44px;
+      }
+      .idle-cross::before { width: 6px; }
+      .idle-cross::after  { height: 6px; }
+      .idle-label {
+        font-size: clamp(8px, 2.5vw, 12px);
+        letter-spacing: 0.25em;
+      }
+
+      /* Page indicator smaller on mobile */
+      #page-indicator {
+        bottom: 12px;
+        font-size: 9px;
+        padding: 4px 14px;
+      }
+
+      /* Doc loading spinner smaller on mobile */
+      .loading-spinner {
+        width: 30px; height: 30px;
+        border-width: 2px;
+      }
+      .loading-text {
+        font-size: 10px;
+      }
+
+      /* Logo less padding on mobile */
+      .logo-container {
+        padding: 1vh 1vw;
+      }
+      .logo-glow {
+        width: 80vw;
+        height: 50vh;
+      }
+
+      /* Verse container narrower on mobile */
+      .verse-container {
+        max-width: 100%;
+      }
+
+      /* ── Mobile-specific nav buttons ── */
+      #mobile-nav {
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        z-index: 60;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        padding: 10px 20px;
+        padding-bottom: max(10px, env(safe-area-inset-bottom));
+        background: linear-gradient(to top, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.7) 70%, transparent 100%);
+        opacity: 0;
+        transform: translateY(10px);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        pointer-events: none;
+      }
+      #mobile-nav.visible {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+      }
+      #mobile-nav button {
+        width: 48px; height: 48px;
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 50%;
+        background: rgba(201,169,110,0.1);
+        color: rgba(255,255,255,0.7);
+        font-size: 20px;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.1s;
+        -webkit-appearance: none;
+        outline: none;
+      }
+      #mobile-nav button:active {
+        background: rgba(201,169,110,0.3);
+        transform: scale(0.92);
+      }
+      #mobile-nav .nav-info {
+        font-family: 'Cinzel', serif;
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        color: rgba(255,255,255,0.4);
+        min-width: 70px;
+        text-align: center;
+      }
+    }
+
+    /* ════════════════════════════════════════════════════════
+       MOBILE LANDSCAPE — special tweaks
+       ════════════════════════════════════════════════════════ */
+    @media (max-width: 768px) and (orientation: landscape) {
+      #stage {
+        padding: 1vh 5vw;
+      }
+      .idle-cross {
+        width: 32px; height: 32px;
+      }
+      .idle-cross::before { width: 5px; }
+      .idle-cross::after  { height: 5px; }
+      #mobile-nav {
+        padding: 6px 20px;
+        padding-bottom: max(6px, env(safe-area-inset-bottom));
+      }
+      #mobile-nav button {
+        width: 40px; height: 40px;
+        font-size: 16px;
+      }
+      #mobile-nav .nav-info {
+        font-size: 9px;
+        min-width: 55px;
+      }
+    }
+
+    /* ── Desktop: hide mobile nav ── */
+    @media (min-width: 769px) {
+      #mobile-nav {
+        display: none !important;
+      }
+    }
+
+    /* ── Touch feedback ripple ── */
+    .touch-ripple {
+      position: fixed;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: rgba(201,169,110,0.2);
+      transform: translate(-50%, -50%) scale(0);
+      animation: ripple 0.5s ease-out forwards;
+      pointer-events: none;
+      z-index: 999;
+    }
+    @keyframes ripple {
+      to { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+    }
   </style>
 </head>
 <body>
@@ -472,6 +670,13 @@ const String tvHtmlContent = r'''
     <p class="loading-text">Loading document...</p>
   </div>
 
+  <!-- Mobile navigation bar (only visible on small screens) -->
+  <div id="mobile-nav">
+    <button id="nav-prev" title="Previous">&#8249;</button>
+    <span id="nav-info" class="nav-info"></span>
+    <button id="nav-next" title="Next">&#8250;</button>
+  </div>
+
 <script>
   let ws, reconnectTimer;
   let state = { type: 'idle', content: null, fontSize: 44 };
@@ -484,6 +689,12 @@ const String tvHtmlContent = r'''
   let pdfRendering = false;
   let currentPdfUrl = '';
 
+  // ── Mobile detection ──
+  function isMobile() {
+    return window.innerWidth <= 768 ||
+           /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }
+
   // ── Animated background handler ──
   function setAnimatedBg(type) {
     document.querySelectorAll('.anim-bg').forEach(el => el.classList.remove('active'));
@@ -492,6 +703,41 @@ const String tvHtmlContent = r'''
       const animName = type.replace('animated:', '');
       const el = document.getElementById('anim-' + animName);
       if (el) el.classList.add('active');
+    }
+  }
+
+  // ── Mobile nav update ──
+  function updateMobileNav() {
+    const nav = document.getElementById('mobile-nav');
+    const navInfo = document.getElementById('nav-info');
+    if (!isMobile() || state.type === 'idle' || state.type === 'logo') {
+      nav.classList.remove('visible');
+      return;
+    }
+
+    nav.classList.add('visible');
+
+    if (state.type === 'verse') {
+      const c = state.content || {};
+      const total = c.totalVerses || 1;
+      const current = c.verseIndex !== undefined ? c.verseIndex + 1 : 1;
+      navInfo.textContent = current + ' / ' + total;
+    } else if (state.type === 'slide') {
+      const c = state.content || {};
+      const total = c.totalSlides || 1;
+      const current = c.slideIndex !== undefined ? c.slideIndex + 1 : 1;
+      navInfo.textContent = current + ' / ' + total;
+    } else if (state.type === 'song') {
+      const c = state.content || {};
+      const current = (c.currentStanza || 0) + 1;
+      const total = c.totalStanzas || (c.stanzas || []).length;
+      navInfo.textContent = current + ' / ' + total;
+    } else if (state.type === 'pdf') {
+      navInfo.textContent = pdfPage + ' / ' + pdfTotalPages;
+    } else if (state.type === 'pptx') {
+      navInfo.textContent = 'PPTX';
+    } else {
+      navInfo.textContent = '';
     }
   }
 
@@ -527,7 +773,15 @@ const String tvHtmlContent = r'''
   function fontSize(content, base) {
     const total = ((content?.textHi?.length||0) + (content?.textEn?.length||0)) || content?.text?.length || 0;
     const scale = total>350?0.5 : total>250?0.64 : total>160?0.78 : total>90?0.92 : 1;
-    return Math.max(16, Math.round((base||44) * scale));
+    const mobileFactor = isMobile() ? 0.7 : 1;
+    return Math.max(16, Math.round((base||44) * scale * mobileFactor));
+  }
+
+  // ── Mobile font sizing for songs ──
+  function songFontSize(textLen, base) {
+    const scale = textLen > 300 ? 0.55 : textLen > 200 ? 0.68 : textLen > 120 ? 0.82 : textLen > 60 ? 0.95 : 1.1;
+    const mobileFactor = isMobile() ? 0.65 : 1;
+    return Math.max(14, Math.round((base || 44) * scale * mobileFactor));
   }
 
   // ── PDF rendering ──
@@ -563,6 +817,7 @@ const String tvHtmlContent = r'''
       }
 
       docLoading.classList.remove('active');
+      updateMobileNav();
     } catch (e) {
       console.error('[TV] PDF load error:', e);
       docLoading.classList.remove('active');
@@ -643,6 +898,7 @@ const String tvHtmlContent = r'''
   function render() {
     const stage = document.getElementById('stage');
     const bgLayer = document.getElementById('bg-layer');
+    const mobile = isMobile();
 
     // Handle background: animated or image
     const bgUrl = state.background?.url || '';
@@ -678,9 +934,10 @@ const String tvHtmlContent = r'''
       const enPx  = fsPx + 'px';
       const hasHi = !!c.textHi;
       const hasEn = !!c.textEn;
+      const maxW = mobile ? '100%' : '1400px';
 
       stage.innerHTML = `
-        <div class="verse-container fade-in" style="max-width:1400px;width:100%">
+        <div class="verse-container fade-in" style="max-width:${maxW};width:100%">
           ${hasHi ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:${hasEn?'12px':'20px'}">${c.textHi}</p>` : ''}<br/>
           ${hasEn ? `<p class="verse-en" style="font-size:${enPx};margin-bottom:16px">${c.textEn}</p>` : ''}
           ${!hasHi && c.text ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:16px">"${c.text}"</p>` : ''}
@@ -693,31 +950,47 @@ const String tvHtmlContent = r'''
       const c = state.content || {};
 
       if (c.image && c.showText === false) {
-        const docViewer = document.getElementById('doc-viewer');
         const imgEl = document.createElement('img');
         imgEl.src = c.image;
         imgEl.style.cssText = 'width:100%;height:100%;object-fit:contain;position:fixed;inset:0;z-index:40;background:#000;';
         document.body.appendChild(imgEl);
+        updateMobileNav();
         return;
       }
 
-      const fsPx  = Math.round((state.fontSize||40) * 1.15) + 'px';
-      const bodyPx = Math.round((state.fontSize||40) * 0.78) + 'px';
+      const fsPx  = Math.round((state.fontSize||40) * (mobile ? 0.8 : 1.15)) + 'px';
+      const bodyPx = Math.round((state.fontSize||40) * (mobile ? 0.6 : 0.78)) + 'px';
 
       if (c.image) {
-        stage.innerHTML = `
-          <div class="fade-in" style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;width:100%;max-width:1400px">
-            <img src="${c.image}" style="max-height:65vh;object-fit:contain;border-radius:12px;border:1px solid rgba(255,255,255,0.08)"/>
-            <div style="text-align:left">
-              ${c.subtitle ? `<p class="slide-subtitle">${c.subtitle}</p>` : ''}
-              <p class="slide-title" style="font-size:${fsPx};margin-bottom:16px">${c.title||''}</p>
-              <div style="width:40px;height:2px;background:var(--gold);margin-bottom:16px;opacity:0.6"></div>
-              <p class="slide-text" style="font-size:${bodyPx}">${c.text||''}</p>
-            </div>
-          </div>`;
+        if (mobile) {
+          // Mobile: stacked layout (image on top, text below)
+          stage.innerHTML = `
+            <div class="fade-in" style="display:flex;flex-direction:column;align-items:center;width:100%;gap:16px">
+              <img src="${c.image}" style="max-height:40vh;object-fit:contain;border-radius:8px;border:1px solid rgba(255,255,255,0.08);width:100%"/>
+              <div style="text-align:center;width:100%">
+                ${c.subtitle ? `<p class="slide-subtitle">${c.subtitle}</p>` : ''}
+                <p class="slide-title" style="font-size:${fsPx};margin-bottom:12px">${c.title||''}</p>
+                <div style="width:40px;height:2px;background:var(--gold);margin:0 auto 12px;opacity:0.6"></div>
+                <p class="slide-text" style="font-size:${bodyPx}">${c.text||''}</p>
+              </div>
+            </div>`;
+        } else {
+          // TV/Desktop: side-by-side layout
+          stage.innerHTML = `
+            <div class="fade-in" style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;width:100%;max-width:1400px">
+              <img src="${c.image}" style="max-height:65vh;object-fit:contain;border-radius:12px;border:1px solid rgba(255,255,255,0.08)"/>
+              <div style="text-align:left">
+                ${c.subtitle ? `<p class="slide-subtitle">${c.subtitle}</p>` : ''}
+                <p class="slide-title" style="font-size:${fsPx};margin-bottom:16px">${c.title||''}</p>
+                <div style="width:40px;height:2px;background:var(--gold);margin-bottom:16px;opacity:0.6"></div>
+                <p class="slide-text" style="font-size:${bodyPx}">${c.text||''}</p>
+              </div>
+            </div>`;
+        }
       } else {
+        const maxW = mobile ? '100%' : '1300px';
         stage.innerHTML = `
-          <div class="slide-container fade-in" style="max-width:1300px;width:100%">
+          <div class="slide-container fade-in" style="max-width:${maxW};width:100%">
             ${c.subtitle ? `<p class="slide-subtitle">${c.subtitle}</p>` : ''}
             <p class="slide-title" style="font-size:${fsPx};margin-bottom:24px">${c.title||''}</p>
             <div class="ornament">&#10022;</div>
@@ -735,12 +1008,12 @@ const String tvHtmlContent = r'''
       const currentStanza = stanzas[currentIdx] || '';
       const stanzaText = currentStanza.replace(/\\n/g, '<br/>').replace(/\n/g, '<br/>');
       const textLen = currentStanza.length;
-      const baseFs = state.fontSize || 44;
-      const scale = textLen > 300 ? 0.55 : textLen > 200 ? 0.68 : textLen > 120 ? 0.82 : textLen > 60 ? 0.95 : 1.1;
-      const stanzaFs = Math.max(18, Math.round(baseFs * scale)) + 'px';
+      const stanzaFs = songFontSize(textLen, state.fontSize) + 'px';
+      const maxW = mobile ? '100%' : '1500px';
 
       stage.innerHTML = `
-        <div class="verse-container fade-in" style="max-width:1500px;width:100%">
+        <div class="verse-container fade-in" style="max-width:${maxW};width:100%">
+          ${mobile && songTitle ? `<p class="song-title">${songTitle}</p>` : ''}
           <p class="verse-hi" style="font-size:${stanzaFs};line-height:1.8;letter-spacing:0.01em;white-space:pre-line">${stanzaText}</p>
           <p class="song-stanza-counter">${currentIdx + 1} / ${totalStanzas}</p>
         </div>`;
@@ -764,9 +1037,15 @@ const String tvHtmlContent = r'''
         closeDocViewer();
         loadPdf(newUrl);
       } else if (pdfDoc && pdfTotalPages > 0) {
-        if (targetPage !== pdfPage && targetPage >= 1 && targetPage <= pdfTotalPages) {
-          pdfPage = targetPage;
+        // Clamp page to valid range [1 .. pdfTotalPages]
+        const clampedPage = Math.max(1, Math.min(targetPage, pdfTotalPages));
+        if (clampedPage !== pdfPage) {
+          pdfPage = clampedPage;
           renderPdfPage(pdfPage);
+        }
+        // If app sent an out-of-range page, send back the corrected page
+        if (clampedPage !== targetPage && ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ event: 'pdf-page', data: { page: clampedPage, totalPages: pdfTotalPages } }));
         }
       } else if (newUrl) {
         stage.innerHTML = '';
@@ -783,6 +1062,9 @@ const String tvHtmlContent = r'''
         loadPptx(newUrl);
       }
     }
+
+    // Update mobile nav after render
+    updateMobileNav();
   }
 
   // ── Keyboard navigation for PDF ──
@@ -793,22 +1075,91 @@ const String tvHtmlContent = r'''
       if (pdfPage < pdfTotalPages) {
         pdfPage++;
         renderPdfPage(pdfPage);
-        ws.send(JSON.stringify({ event: 'pdf-page', data: { page: pdfPage } }));
+        ws.send(JSON.stringify({ event: 'pdf-page', data: { page: pdfPage, totalPages: pdfTotalPages } }));
+        updateMobileNav();
       }
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
       if (pdfPage > 1) {
         pdfPage--;
         renderPdfPage(pdfPage);
-        ws.send(JSON.stringify({ event: 'pdf-page', data: { page: pdfPage } }));
+        ws.send(JSON.stringify({ event: 'pdf-page', data: { page: pdfPage, totalPages: pdfTotalPages } }));
+        updateMobileNav();
       }
     }
   });
 
-  // ── Window resize: re-render PDF ──
+  // ── Mobile navigation buttons ──
+  document.getElementById('nav-prev').addEventListener('click', (e) => {
+    e.preventDefault();
+    handlePrev();
+  });
+  document.getElementById('nav-next').addEventListener('click', (e) => {
+    e.preventDefault();
+    handleNext();
+  });
+
+  function handlePrev() {
+    if (state.type === 'pdf' && pdfDoc && pdfPage > 1) {
+      pdfPage--;
+      renderPdfPage(pdfPage);
+      ws.send(JSON.stringify({ event: 'pdf-page', data: { page: pdfPage, totalPages: pdfTotalPages } }));
+      updateMobileNav();
+    } else if (state.type === 'verse') {
+      // Request previous verse from app — handled by app
+    } else if (state.type === 'song') {
+      // Request previous stanza from app
+    }
+  }
+
+  function handleNext() {
+    if (state.type === 'pdf' && pdfDoc && pdfPage < pdfTotalPages) {
+      pdfPage++;
+      renderPdfPage(pdfPage);
+      ws.send(JSON.stringify({ event: 'pdf-page', data: { page: pdfPage, totalPages: pdfTotalPages } }));
+      updateMobileNav();
+    } else if (state.type === 'verse') {
+      // Request next verse from app — handled by app
+    } else if (state.type === 'song') {
+      // Request next stanza from app
+    }
+  }
+
+  // ── Touch swipe navigation for mobile ──
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartTime = 0;
+
+  document.addEventListener('touchstart', (e) => {
+    touchStartX = e.changedTouches[0].screenX;
+    touchStartY = e.changedTouches[0].screenY;
+    touchStartTime = Date.now();
+  }, { passive: true });
+
+  document.addEventListener('touchend', (e) => {
+    const touchEndX = e.changedTouches[0].screenX;
+    const touchEndY = e.changedTouches[0].screenY;
+    const diffX = touchStartX - touchEndX;
+    const diffY = touchStartY - touchEndY;
+    const elapsed = Date.now() - touchStartTime;
+
+    // Only detect horizontal swipes (not vertical scrolls)
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50 && elapsed < 500) {
+      if (diffX > 0) {
+        // Swipe left → next
+        handleNext();
+      } else {
+        // Swipe right → previous
+        handlePrev();
+      }
+    }
+  }, { passive: true });
+
+  // ── Window resize: re-render PDF + update mobile nav ──
   window.addEventListener('resize', () => {
     if (state.type === 'pdf' && pdfDoc) {
       renderPdfPage(pdfPage);
     }
+    updateMobileNav();
   });
 
   connect();

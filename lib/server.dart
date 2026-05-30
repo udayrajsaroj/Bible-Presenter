@@ -303,6 +303,10 @@ Future<void> startServer(dynamic message) async {
             case 'pdf-page':
               if (_currentState['type'] == 'pdf' || _currentState['type'] == 'pptx') {
                 (_currentState['content'] as Map<String, dynamic>)['currentPage'] = data['page'] ?? 1;
+                // Also update totalPages if TV sent it (keeps app in sync)
+                if (data['totalPages'] != null) {
+                  (_currentState['content'] as Map<String, dynamic>)['totalPages'] = data['totalPages'];
+                }
                 _broadcast(_currentState);
               }
               break;
