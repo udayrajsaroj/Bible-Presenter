@@ -271,6 +271,16 @@ Future<void> startServer(dynamic message) async {
               _broadcast(_currentState);
               break;
 
+            case 'cast-welcome':
+              _currentState = {
+                'type': 'welcome',
+                'content': data,
+                'fontSize': _currentState['fontSize'] ?? 44,
+                'background': null, // Welcome screen has its own white bg
+              };
+              _broadcast(_currentState);
+              break;
+
             case 'cast-pdf':
               _currentState = {
                 'type': 'pdf',

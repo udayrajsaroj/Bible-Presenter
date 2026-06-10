@@ -2,17 +2,24 @@
   {
     "title": "10000 Reasons (Bless The Lord)",
     "stanzas": [
-      "Bless the Lord, O my soul\nO my soul\nWorship His holy name\nSing like never before\nO my soul\nI'll worship His holy name",
+      "[Chorus]\nBless the Lord, O my soul\nO my soul\nWorship His holy name\nSing like never before\nO my soul\nI'll worship Your holy name",
       "The sun comes up, it's a new day dawning\nIt's time to sing Your song again\nWhatever may pass, and whatever lies before me\nLet me be singing when the evening comes",
+      "[Chorus]\nBless the Lord, O my soul\nO my soul\nWorship His holy name\nSing like never before\nO my soul\nI'll worship Your holy name",
       "You're rich in love, and You're slow to anger\nYour name is great, and Your heart is kind\nFor all Your goodness I will keep on singing\nTen thousand reasons for my heart to find",
+      "[Chorus]\nBless the Lord, O my soul\nO my soul\nWorship His holy name\nSing like never before\nO my soul\nI'll worship Your holy name",
       "And on that day when my strength is failing\nThe end draws near and my time has come\nStill my soul will sing Your praise unending\nTen thousand years and then forevermore",
-      "महिमा तू कर, ऐ मेरे मन\nप्रभु की आराधना तू कर\nनया गीत तू गा, ऐ मेरे मन\nप्रभु की आराधना तू कर"
+      "[Chorus]\nBless the Lord, O my soul\nO my soul\nWorship His holy name\nSing like never before\nO my soul\nI'll worship Your holy name",
+      "[Chorus]\nBless the Lord, O my soul\nO my soul\nWorship His holy name\nSing like never before\nO my soul\nI'll worship Your holy name"
     ]
   },
   {
     "title": "24 x 7 I Praise You Jehovah",
     "stanzas": [
-      "24 x 7 I praise You, Jehovah\n24 x 7 I will bless Your holy name"
+      "[Chorus]\n24 x 7 I praise You, Jehovah\n24 x 7 I will bless Your holy name",
+      "Morning and evening I'll sing of Your glory\nMorning and evening I'll tell of Your love",
+      "[Chorus]\n24 x 7 I praise You, Jehovah\n24 x 7 I will bless Your holy name",
+      "You are the Alpha, You are the Omega\nYou are the beginning, You are the end",
+      "[Chorus]\n24 x 7 I praise You, Jehovah\n24 x 7 I will bless Your holy name"
     ]
   },
   {
@@ -162,7 +169,12 @@
     "stanzas": [
       "अपना बोझ यीशु पे डालो\nवो तुमसे प्यार करता है",
       "ऊँचा ऊँचा ऊँचा ऊँचा\nऊँचा यीशु को उठाओ",
-      "नीचे नीचे नीचे नीचे\nनीचे शैतान को दबाओ",
+      "नीचे नीचे नीचे नीचे\nनीचे शैतान को दबाओ"
+    ]
+  },
+  {
+    "title": "Cast Your Burdens Unto Jesus",
+    "stanzas": [
       "Cast your burdens unto Jesus\nFor He cares for you",
       "Higher, higher, higher, higher\nLift up Jesus higher",
       "Lower, lower, lower, lower\nStomp the Satan lower"
@@ -210,10 +222,10 @@
     "stanzas": [
       "आराधना हम करते हैं\nपूरे दिल और मन से\nतेरी महिमा गाते हैं",
       "और हम कहते हैं\nदिल से कहते हैं\nऔर हम ये कहते हैं",
-      "आ प्रभु यीशु आ\nमुझमें हो तेरी महिमा",
+      "[Chorus]\nआ प्रभु यीशु आ\nमुझमें हो तेरी महिमा",
       "तेरे भवन में हम आते हैं\nसारा आदर हम तुझको देते हैं",
       "और हम कहते हैं\nदिल से कहते हैं",
-      "आ प्रभु यीशु आ\nमुझमें हो तेरी महिमा"
+      "[Chorus]\nआ प्रभु यीशु आ\nमुझमें हो तेरी महिमा"
     ]
   },
   {
@@ -241,7 +253,12 @@
       "और प्यार और सामर्थ्य चाहता हूँ मेरे खुदा",
       "आराधना तेरी मैं दिल से करूँगा\nआराधना तेरी मैं मन से करूँगा\nआराधना तेरी मैं सामर्थ्य से करूँगा\nकि तू मेरा प्रभु... मेरा प्रभु",
       "प्रेमाने सामर्थ्याने, ये तू माझ्या जीवनी ये",
-      "आराधीन मी हृदयाने तुला, आराधीन मी मनाने तुला\nआराधीन मी सामर्थ्याने तुला\nके तू माझा प्रभू... माझा प्रभू",
+      "आराधीन मी हृदयाने तुला, आराधीन मी मनाने तुला\nआराधीन मी सामर्थ्याने तुला\nके तू माझा प्रभू... माझा प्रभू"
+    ]
+  },
+  {
+    "title": "More Love More Power",
+    "stanzas": [
       "More love, more power\nMore of You in my life",
       "And I will worship You with all of my heart\nAnd I will worship You with all of my life\nAnd I will worship You with all of my strength\nFor You are my Lord... You are my Lord"
     ]
@@ -264,11 +281,16 @@
     ]
   },
   {
-    "title": "Bas Tujhe (All I Need Is You)",
+    "title": "Bas Tujhe",
     "stanzas": [
       "बस तुझे मैं चाहूँ... मैं चाहूँ, बस तुझे यीशु",
       "बस तुझे मैं मांगूँ... मैं मांगूँ, बस तुझे यीशु",
-      "बस तुझे मैं ढूँढूँ... मैं ढूँढूँ, बस तुझे यीशु",
+      "बस तुझे मैं ढूँढूँ... मैं ढूँढूँ, बस तुझे यीशु"
+    ]
+  },
+  {
+    "title": "All I Need Is You",
+    "stanzas": [
       "All I need is You\nAll I need is You, Lord",
       "All I want is You\nAll I want is You, Lord"
     ]
@@ -355,7 +377,12 @@
     "title": "Celebrate",
     "stanzas": [
       "Celebrate, celebrate\nCelebrate the victory of the Lord",
-      "He has done mighty things yet again (3)\nCelebrate the victory of the Lord",
+      "He has done mighty things yet again (3)\nCelebrate the victory of the Lord"
+    ]
+  },
+  {
+    "title": "Manao Manao",
+    "stanzas": [
       "मनाओ मनाओ, उसकी जय हमेशा मनाओ",
       "उसने बड़े-बड़े काम किए, उसकी जय हमेशा मनाओ"
     ]
@@ -393,9 +420,9 @@
     "title": "Dev Bapacha JaiJaiKar Kara",
     "stanzas": [
       "देव बापाचा जयजयकार करा\nदेव बापाचा जयजयकार करा",
-      "जयजयकार करा, जयजयकार करा\nदेव बापाचा जयजयकार करा",
+      "[Chorus]\nजयजयकार करा, जयजयकार करा\nदेव बापाचा जयजयकार करा",
       "यीशू नामाचा जयजयकार करा\nयीशू नामाचा जयजयकार करा",
-      "जयजयकार करा, जयजयकार करा\nदेव बापाचा जयजयकार करा",
+      "[Chorus]\nजयजयकार करा, जयजयकार करा\nदेव बापाचा जयजयकार करा",
       "पवित्र आत्म्याचा जयजयकार करा\nपवित्र आत्म्याचा जयजयकार",
       "जयजयकार करा, जयजयकार करा\nपवित्र आत्म्याचा जयजयकार करा"
     ]
@@ -497,8 +524,161 @@
   {
     "title": "Give Thanks",
     "stanzas": [
-      "Give thanks with a grateful heart\nGive thanks to the Holy One\nGive thanks because He's given Jesus Christ, His Son",
-      "And now let the weak say, \"I am strong\"\nLet the poor say, \"I am rich\"\nBecause of what the Lord has done for us\nGive thanks"
+      "[Chorus]\nGive thanks with a grateful heart\nGive thanks to the Holy One\nGive thanks because He's given Jesus Christ, His Son",
+      "[Chorus]\nAnd now let the weak say, \"I am strong\"\nLet the poor say, \"I am rich\"\nBecause of what the Lord has done for us\nGive thanks",
+      "[Chorus]\nGive thanks with a grateful heart\nGive thanks to the Holy One\nGive thanks because He's given Jesus Christ, His Son",
+      "[Chorus]\nAnd now let the weak say, \"I am strong\"\nLet the poor say, \"I am rich\"\nBecause of what the Lord has done for us\nGive thanks"
+    ]
+  },
+  {
+    "title": "Amazing Grace",
+    "stanzas": [
+      "Amazing grace, how sweet the sound\nThat saved a wretch like me\nI once was lost, but now am found\nWas blind, but now I see",
+      "'Twas grace that taught my heart to fear\nAnd grace my fears relieved\nHow precious did that grace appear\nThe hour I first believed",
+      "Through many dangers, toils and snares\nI have already come\n'Tis grace hath brought me safe thus far\nAnd grace will lead me home",
+      "The Lord has promised good to me\nHis word my hope secures\nHe will my shield and portion be\nAs long as life endures",
+      "When we've been there ten thousand years\nBright shining as the sun\nWe've no less days to sing God's praise\nThan when we first begun"
+    ]
+  },
+  {
+    "title": "How Great Thou Art",
+    "stanzas": [
+      "O Lord my God, when I in awesome wonder\nConsider all the worlds Thy hands have made\nI see the stars, I hear the rolling thunder\nThy power throughout the universe displayed",
+      "[Chorus]\nThen sings my soul, my Savior God, to Thee\nHow great Thou art, how great Thou art\nThen sings my soul, my Savior God, to Thee\nHow great Thou art, how great Thou art",
+      "When through the woods and forest glades I wander\nAnd hear the birds sing sweetly in the trees\nWhen I look down from lofty mountain grandeur\nAnd hear the brook and feel the gentle breeze",
+      "[Chorus]\nThen sings my soul, my Savior God, to Thee\nHow great Thou art, how great Thou art\nThen sings my soul, my Savior God, to Thee\nHow great Thou art, how great Thou art",
+      "And when I think that God, His Son not sparing\nSent Him to die, I scarce can take it in\nThat on the cross, my burden gladly bearing\nHe bled and died to take away my sin",
+      "[Chorus]\nThen sings my soul, my Savior God, to Thee\nHow great Thou art, how great Thou art\nThen sings my soul, my Savior God, to Thee\nHow great Thou art, how great Thou art",
+      "When Christ shall come with shout of acclamation\nAnd take me home, what joy shall fill my heart\nThen I shall bow in humble adoration\nAnd there proclaim, my God, how great Thou art",
+      "[Chorus]\nThen sings my soul, my Savior God, to Thee\nHow great Thou art, how great Thou art\nThen sings my soul, my Savior God, to Thee\nHow great Thou art, how great Thou art"
+    ]
+  },
+  {
+    "title": "Holy Holy Holy",
+    "stanzas": [
+      "Holy, holy, holy! Lord God Almighty\nEarly in the morning our song shall rise to Thee\nHoly, holy, holy! Merciful and mighty\nGod in three Persons, blessed Trinity",
+      "Holy, holy, holy! All the saints adore Thee\nCasting down their golden crowns around the glassy sea\nCherubim and seraphim falling down before Thee\nWhich wert, and art, and evermore shalt be",
+      "Holy, holy, holy! Though the darkness hide Thee\nThough the eye of sinful man Thy glory may not see\nOnly Thou art holy, there is none beside Thee\nPerfect in power, in love and purity",
+      "Holy, holy, holy! Lord God Almighty\nAll Thy works shall praise Thy name in earth and sky and sea\nHoly, holy, holy! Merciful and mighty\nGod in three Persons, blessed Trinity"
+    ]
+  },
+  {
+    "title": "What a Friend We Have in Jesus",
+    "stanzas": [
+      "What a friend we have in Jesus\nAll our sins and griefs to bear\nWhat a privilege to carry\nEverything to God in prayer\nOh, what peace we often forfeit\nOh, what needless pain we bear\nAll because we do not carry\nEverything to God in prayer",
+      "Have we trials and temptations\nIs there trouble anywhere\nWe should never be discouraged\nTake it to the Lord in prayer\nCan we find a friend so faithful\nWho will all our sorrows share\nJesus knows our every weakness\nTake it to the Lord in prayer",
+      "Are we weak and heavy-laden\nCumbered with a load of care\nPrecious Savior, still our refuge\nTake it to the Lord in prayer\nDo thy friends despise, forsake thee\nTake it to the Lord in prayer\nIn His arms He'll take and shield thee\nThou wilt find a solace there"
+    ]
+  },
+  {
+    "title": "Great Is Thy Faithfulness",
+    "stanzas": [
+      "Great is Thy faithfulness, O God my Father\nThere is no shadow of turning with Thee\nThou changest not, Thy compassions they fail not\nAs Thou hast been Thou forever wilt be",
+      "[Chorus]\nGreat is Thy faithfulness\nGreat is Thy faithfulness\nMorning by morning new mercies I see\nAll I have needed Thy hand hath provided\nGreat is Thy faithfulness, Lord, unto me",
+      "Summer and winter and springtime and harvest\nSun, moon and stars in their courses above\nJoin with all nature in manifold witness\nTo Thy great faithfulness, mercy and love",
+      "[Chorus]\nGreat is Thy faithfulness\nGreat is Thy faithfulness\nMorning by morning new mercies I see\nAll I have needed Thy hand hath provided\nGreat is Thy faithfulness, Lord, unto me",
+      "Pardon for sin and a peace that endureth\nThine own dear presence to cheer and to guide\nStrength for today and bright hope for tomorrow\nBlessings all mine with ten thousand beside",
+      "[Chorus]\nGreat is Thy faithfulness\nGreat is Thy faithfulness\nMorning by morning new mercies I see\nAll I have needed Thy hand hath provided\nGreat is Thy faithfulness, Lord, unto me"
+    ]
+  },
+  {
+    "title": "Shout to the Lord",
+    "stanzas": [
+      "My Jesus, my Savior\nLord, there is none like You\nAll of my days I want to praise\nThe wonders of Your mighty love",
+      "My comfort, my shelter\nTower of refuge and strength\nLet every breath, all that I am\nNever cease to worship You",
+      "Shout to the Lord, all the earth let us sing\nPower and majesty, praise to the King\nMountains bow down and the seas will roar\nAt the sound of Your name",
+      "I sing for joy at the work of Your hands\nForever I'll love You, forever I'll stand\nNothing compares to the promise I have in You"
+    ]
+  },
+  {
+    "title": "Here I Am to Worship",
+    "stanzas": [
+      "Light of the world, You stepped down into darkness\nOpened my eyes, let me see\nBeauty that made this heart adore You\nHope of a life spent with You",
+      "[Chorus]\nHere I am to worship, here I am to bow down\nHere I am to say that You're my God\nYou're altogether lovely, altogether worthy\nAltogether wonderful to me",
+      "King of all days, oh so highly exalted\nGlorious in heaven above\nHumbly You came to the earth You created\nAll for love's sake became poor",
+      "[Chorus]\nHere I am to worship, here I am to bow down\nHere I am to say that You're my God\nYou're altogether lovely, altogether worthy\nAltogether wonderful to me",
+      "I'll never know how much it cost\nTo see my sin upon that cross\nI'll never know how much it cost\nTo see my sin upon that cross",
+      "[Chorus]\nHere I am to worship, here I am to bow down\nHere I am to say that You're my God\nYou're altogether lovely, altogether worthy\nAltogether wonderful to me"
+    ]
+  },
+  {
+    "title": "Open the Eyes of My Heart",
+    "stanzas": [
+      "[Chorus]\nOpen the eyes of my heart, Lord\nOpen the eyes of my heart\nI want to see You, I want to see You",
+      "[Chorus]\nOpen the eyes of my heart, Lord\nOpen the eyes of my heart\nI want to see You, I want to see You",
+      "To see You high and lifted up\nShining in the light of Your glory\nPour out Your power and love\nAs we sing holy, holy, holy",
+      "Holy, holy, holy\nHoly, holy, holy\nHoly, holy, holy\nI want to see You"
+    ]
+  },
+  {
+    "title": "Blessed Assurance",
+    "stanzas": [
+      "Blessed assurance, Jesus is mine\nOh, what a foretaste of glory divine\nHeir of salvation, purchase of God\nBorn of His Spirit, washed in His blood",
+      "[Chorus]\nThis is my story, this is my song\nPraising my Savior all the day long\nThis is my story, this is my song\nPraising my Savior all the day long",
+      "Perfect submission, perfect delight\nVisions of rapture now burst on my sight\nAngels descending bring from above\nEchoes of mercy, whispers of love",
+      "[Chorus]\nThis is my story, this is my song\nPraising my Savior all the day long\nThis is my story, this is my song\nPraising my Savior all the day long",
+      "Perfect submission, all is at rest\nI in my Savior am happy and blessed\nWatching and waiting, looking above\nFilled with His goodness, lost in His love",
+      "[Chorus]\nThis is my story, this is my song\nPraising my Savior all the day long\nThis is my story, this is my song\nPraising my Savior all the day long"
+    ]
+  },
+  {
+    "title": "Come Now Is the Time to Worship",
+    "stanzas": [
+      "[Chorus]\nCome, now is the time to worship\nCome, now is the time to give your heart\nCome, just as you are to worship\nCome, just as you are before your God, come",
+      "[Chorus]\nOne day every tongue will confess You are God\nOne day every knee will bow\nStill the greatest treasure remains\nFor those who gladly choose You now",
+      "[Chorus]\nCome, now is the time to worship\nCome, now is the time to give your heart\nCome, just as you are to worship\nCome, just as you are before your God, come",
+      "[Chorus]\nOne day every tongue will confess You are God\nOne day every knee will bow\nStill the greatest treasure remains\nFor those who gladly choose You now",
+      "Willingly we choose to surrender our lives\nWillingly our knees will bow\nStill the greatest treasure remains\nFor those who gladly choose You now"
+    ]
+  },
+  {
+    "title": "Lord I Lift Your Name on High",
+    "stanzas": [
+      "[Chorus]\nLord, I lift Your name on high\nLord, I love to sing Your praises\nI'm so glad You're in my life\nI'm so glad You came to save us",
+      "[Chorus]\nYou came from heaven to earth\nTo show the way\nFrom the earth to the cross\nMy debt to pay\nFrom the cross to the grave\nFrom the grave to the sky\nLord, I lift Your name on high",
+      "[Chorus]\nLord, I lift Your name on high\nLord, I love to sing Your praises\nI'm so glad You're in my life\nI'm so glad You came to save us",
+      "[Chorus]\nYou came from heaven to earth\nTo show the way\nFrom the earth to the cross\nMy debt to pay\nFrom the cross to the grave\nFrom the grave to the sky\nLord, I lift Your name on high"
+    ]
+  },
+  {
+    "title": "Awesome God",
+    "stanzas": [
+      "[Chorus]\nOur God is an awesome God\nHe reigns from heaven above\nWith wisdom, power and love\nOur God is an awesome God",
+      "When He rolls up His sleeves\nHe ain't just putting on the ritz\nOur God is an awesome God",
+      "There's thunder in His footsteps\nAnd lightning in His fists\nOur God is an awesome God",
+      "The Lord wasn't joking\nWhen He kicked 'em out of Eden\nIt wasn't for no reason\nThat He shed His blood\nHis return is very close\nAnd so you better be believing\nThat our God is an awesome God",
+      "[Chorus]\nOur God is an awesome God\nHe reigns from heaven above\nWith wisdom, power and love\nOur God is an awesome God"
+    ]
+  },
+  {
+    "title": "I Could Sing of Your Love Forever",
+    "stanzas": [
+      "[Chorus]\nOver the mountains and the sea\nYour river runs with love for me\nAnd I will open up my heart\nAnd let the Healer set me free",
+      "[Chorus]\nI'm happy to be in the truth\nAnd I will daily lift my hands\nFor I will always sing\nOf when Your love came down",
+      "[Chorus]\nI could sing of Your love forever\nI could sing of Your love forever\nI could sing of Your love forever\nI could sing of Your love forever",
+      "[Chorus]\nOver the mountains and the sea\nYour river runs with love for me\nAnd I will open up my heart\nAnd let the Healer set me free",
+      "[Chorus]\nI'm happy to be in the truth\nAnd I will daily lift my hands\nFor I will always sing\nOf when Your love came down",
+      "[Chorus]\nI could sing of Your love forever\nI could sing of Your love forever\nI could sing of Your love forever\nI could sing of Your love forever"
+    ]
+  },
+  {
+    "title": "Forever",
+    "stanzas": [
+      "The moon and stars they wept\nThe morning sun was dead\nThe Savior of the world was fallen\nHis body on the cross\nHis blood poured out for us\nThe weight of every curse upon Him",
+      "One final breath He gave\nAs heaven looked away\nThe Son of God was laid in darkness\nA battle in the grave\nThe war on death was waged\nThe power of hell forever broken",
+      "The ground began to shake\nThe stone was rolled away\nHis perfect love could not be overcome\nNow death where is your sting\nOur resurrected King\nHas rendered you defeated",
+      "Forever, He is glorified\nForever, He is lifted high\nForever, He is risen\nHe is alive, He is alive"
+    ]
+  },
+  {
+    "title": "You Are My All in All",
+    "stanzas": [
+      "You are my strength when I am weak\nYou are the treasure that I seek\nYou are my all in all",
+      "Seeking You as a precious jewel\nLord, to give up I'd be a fool\nYou are my all in all",
+      "[Chorus]\nJesus, Lamb of God\nWorthy is Your name\nJesus, Lamb of God\nWorthy is Your name",
+      "Taking my sin, my cross, my shame\nRising again I bless Your name\nYou are my all in all",
+      "When I fall down You pick me up\nWhen I am dry You fill my cup\nYou are my all in all",
+      "[Chorus]\nJesus, Lamb of God\nWorthy is Your name\nJesus, Lamb of God\nWorthy is Your name"
     ]
   },
   {
@@ -770,9 +950,9 @@
     "title": "Jiske Naam Se",
     "stanzas": [
       "जिसके नाम से ये ज़मीन रुक जाती है\nजिसके नाम से आसमान झुक जाता है\nजिसके सामने मौत भी टिक ना सकी\nकौन मौत के पार हमको ले जाता है",
-      "कौन है... ओ ओ ओ यीशु नाम",
+      "[Chorus]\nकौन है... ओ ओ ओ यीशु नाम",
       "तूफ़ान कौन रोकता है, दरिया को कौन चीरता है\nकौन नाम है जो आज भी ज़ंजीरों को भी तोड़ता है",
-      "कौन है... ओ ओ ओ यीशु नाम"
+      "[Chorus]\nकौन है... ओ ओ ओ यीशु नाम"
     ]
   },
   {
@@ -926,9 +1106,9 @@
       "महिमा हो तेरी",
       "करते हैं तेरी हम स्तुति, हृदय की गहराइयों से",
       "यीशु तू ही है, तू ही है हमारा प्रभु",
-      "महिमा हो तेरी...",
+      "[Chorus]\nमहिमा हो तेरी...",
       "आत्मा और सच्चाई से तेरी आराधना करें\nयीशु तू ही है, तू ही है हमारा प्रभु\nयीशु तू ही है, तू ही है हमारा प्रभु",
-      "महिमा हो तेरी..."
+      "[Chorus]\nमहिमा हो तेरी..."
     ]
   },
   {
@@ -973,11 +1153,11 @@
     "title": "Mera Dil Bane Tera Sinhasan",
     "stanzas": [
       "मेरा दिल बने तेरा सिंहासन, मेरी आत्मा तेरा आसन\nमेरे मन में तू हो विराजमान, यीशु मेरे तू है बड़ा महान",
-      "यीशुआ... यीशुआ... यीशुआ... मेरे मन में समा जा",
+      "[Chorus]\nयीशुआ... यीशुआ... यीशुआ... मेरे मन में समा जा",
       "मेरे चेहरे पे तेरी रौशनी चमके, मेरी बातों से तेरी खुशबू महके\nमेरा जीवन बने तेरी स्तुति का स्थान, तेरी प्रशंसा करती मेरी ज़ुबान",
-      "यीशुआ... यीशुआ... यीशुआ... मेरे मन में समा जा",
+      "[Chorus]\nयीशुआ... यीशुआ... यीशुआ... मेरे मन में समा जा",
       "तुझे देखना मैं चाहूँ, तेरे और यीशु करीब आऊँ\nकितना है तू प्यारा प्रभु, तेरी महिमा मैं सब को सुनाऊँ",
-      "यीशुआ... यीशुआ... यीशुआ... मेरे मन में समा जा"
+      "[Chorus]\nयीशुआ... यीशुआ... यीशुआ... मेरे मन में समा जा"
     ]
   },
   {
@@ -1321,9 +1501,9 @@
     "stanzas": [
       "प्रार्थना मैं तुझसे करूँ, ओ मेरे प्यारे मसीहा\nमेरा ये जीवन तेरे काम आए, यही है मेरी तमन्ना",
       "दिल की गहराई से स्तुति करूँ, आराधना करूँ\nतन से और मन से पूरी शक्ति से, तुझसे मैं प्रेम करूँ",
-      "हे प्रभु यीशु कितना प्यारा है तू\nहे प्रभु यीशु सबसे अच्छा है तू\nप्रार्थना मैं…",
+      "[Chorus]\nहे प्रभु यीशु कितना प्यारा है तू\nहे प्रभु यीशु सबसे अच्छा है तू\nप्रार्थना मैं…",
       "तेरा चेहरा जो सबसे प्यारा, उसको मैं हर पल ढूँढूँगा\nतेरे संग रहकर तुझमें खो जाऊँ, आत्मा से बढ़ता जाऊँ",
-      "हे प्रभु यीशु कितना प्यारा है तू\nहे प्रभु यीशु सबसे अच्छा है तू\nप्रार्थना मैं…",
+      "[Chorus]\nहे प्रभु यीशु कितना प्यारा है तू\nहे प्रभु यीशु सबसे अच्छा है तू\nप्रार्थना मैं…",
       "कितना मधुर है तेरा वचन, भर आते मेरे दोनों नयन\nदुख जो सहा तूने मेरे कारण, भूलूँगा ना मैं जीवन भर",
       "हे प्रभु यीशु कितना प्यारा है तू\nहे प्रभु यीशु सबसे अच्छा है तू"
     ]
@@ -1481,11 +1661,11 @@
     "title": "Stuti Aradhana Upar Jaati Hai",
     "stanzas": [
       "स्तुति आराधना ऊपर जाती है\nआशीष लेकर नीचे आती है\nप्रभु हमारा कितना महान, देखो हमसे करता है प्यार",
-      "हालेलू... हालेलूयाह",
+      "[Chorus]\nहालेलू... हालेलूयाह",
       "प्रार्थना बिनती ऊपर जाती है\nउत्तर लेकर नीचे आती है\nप्रभु हमारा कितना महान, देखो हमसे करता है प्यार",
-      "हालेलू... हालेलूयाह",
+      "[Chorus]\nहालेलू... हालेलूयाह",
       "सियोन में स्तुति तेरी बाट जोहती है\nधन्यवाद करना उसकी महिमा होती है\nप्रभु हमारा कितना महान, देखो हमसे करता है प्यार",
-      "हालेलू... हालेलूयाह"
+      "[Chorus]\nहालेलू... हालेलूयाह"
     ]
   },
   {
@@ -1769,11 +1949,11 @@
     "title": "Tum Dil Me Aise Bas Gaye",
     "stanzas": [
       "तुम दिल में ऐसे बस गये, ज़िंदगी भर के लिये राजा बन गये\nजीवन में ऐसा काम कर गये, पाप मेरे श्राप मेरे चलते बन गये",
-      "दिल में जान में, होठों पे आँखों में तू है",
+      "[Chorus]\nदिल में जान में, होठों पे आँखों में तू है",
       "तू ही है तू ही है, तू ही है राजा तू ही है",
       "तू ही है तू ही है, तू ही है यीशु तू ही है",
       "डर डर के मैं जो जी रहा था, डर से मुझको यीशु ने खींच निकाला\nज़ंजीरों में जो जकड़ा हुआ था, तोड़ कर उनको आज़ाद है किया",
-      "दिल में जान में, होठों पे आँखों में तू है"
+      "[Chorus]\nदिल में जान में, होठों पे आँखों में तू है"
     ]
   },
   {
@@ -2064,9 +2244,9 @@
     "stanzas": [
       "यीशु तेरा नाम सब नामों में ऊँचा",
       "तेरे चेहरे पे रोशनी है, तेरे शब्दों में जीवन है\nतीर आत्मा से मैं जी रहा हूँ",
-      "हर ज़बान ये कहती है, सभी घुटने टेकते हैं\nतेरे ही सामने, प्रभु",
+      "[Chorus]\nहर ज़बान ये कहती है, सभी घुटने टेकते हैं\nतेरे ही सामने, प्रभु",
       "मेरे प्राण तेरे हाथों में, तूने मुझको बनाया है\nऔर मैं तेरी ही संतान हूँ",
-      "हर ज़बान ये कहती है, सभी घुटने टेकते हैं\nतेरे ही सामने, प्रभु",
+      "[Chorus]\nहर ज़बान ये कहती है, सभी घुटने टेकते हैं\nतेरे ही सामने, प्रभु",
       "ऊँचा नाम ऊँचा नाम, एक ही नाम एक ही नाम\nयीशु नाम, यीशु नाम"
     ]
   },
@@ -2281,9 +2461,9 @@
     "title": "Aaja Re - Yeshua",
     "stanzas": [
       "दर पे तेरे आए हैं हम झुकाए, ये सर को तेरे सामने\nसब कुछ भूलके हम हाथों को जोड़ें, हुए आए पास तेरे",
-      "आजा रे, आजा रे... ओ यीशु मेरे\nआजा रे, आजा रे... इंतज़ार है तेरा रे",
+      "[Chorus]\nआजा रे, आजा रे... ओ यीशु मेरे\nआजा रे, आजा रे... इंतज़ार है तेरा रे",
       "हम पूरे दिल से तुझे ही पुकारें, जहाँ भी है तू आजा रे\nहातों में तेरे हमें तू संभाले, अब तू कभी आजा रे",
-      "आजा रे, आजा रे... ओ यीशु मेरे\nआजा रे, आजा रे... इंतज़ार है तेरा रे",
+      "[Chorus]\nआजा रे, आजा रे... ओ यीशु मेरे\nआजा रे, आजा रे... इंतज़ार है तेरा रे",
       "हर नाम से ऊंचा है, तेरा नाम जो मीठा है\nतेरा नाम जो सच्चा है, तेरा नाम जो प्यारा है\nतेरा नाम जो अच्छा है, तेरा नाम जो यहाँ है",
       "तेरा नाम, तेरा नाम, यीशु नाम"
     ]
@@ -2580,9 +2760,9 @@
     "stanzas": [
       "तू पुकारे मैं आऊँ, तू सुनाए मैं सुनूँ\nयीशु… (4)",
       "तू मेरा चरवाहा, मैं तेरी भेड़ हूँ\nतू मेरा मार्ग है, जिस पर मैं चलूँ (2)",
-      "तू चलाए मैं चलूँ, तू चाहे मैं चाहूँ\nयीशु… (4)",
+      "[Chorus]\nतू चलाए मैं चलूँ, तू चाहे मैं चाहूँ\nयीशु… (4)",
       "तू मेरा गढ़ है, जिसमें पनाह मैं लूँ\nतू मेरा सृजनहार, मैं तेरी रचना हूँ (2)",
-      "तू चलाए मैं चलूँ, तू चाहे मैं चाहूँ\nयीशु… (4)"
+      "[Chorus]\nतू चलाए मैं चलूँ, तू चाहे मैं चाहूँ\nयीशु… (4)"
     ]
   },
   {

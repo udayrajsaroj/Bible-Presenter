@@ -150,6 +150,7 @@ const String tvHtmlContent = r'''
       justify-content: center; align-items: center;
       text-align: center;
       padding: 3vh 3vw;
+      transition: opacity 0.35s ease;
     }
 
     .ornament {
@@ -207,18 +208,6 @@ const String tvHtmlContent = r'''
     }
 
     /* ── Song specific styles ── */
-    .song-title {
-      font-family: 'Cinzel', serif;
-      font-weight: 700;
-      color: var(--gold);
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      font-size: clamp(14px, 2vw, 24px);
-      text-shadow: 0 0 30px rgba(201,169,110,0.3);
-      text-align: center;
-      margin-bottom: 16px;
-      opacity: 0.7;
-    }
     .song-stanza-counter {
       font-family: 'Cinzel', serif;
       font-size: 11px;
@@ -226,6 +215,14 @@ const String tvHtmlContent = r'''
       color: rgba(255,255,255,0.25);
       text-transform: uppercase;
       margin-top: 12px;
+    }
+    .song-title {
+      font-family: 'Cinzel', serif;
+      font-weight: 400;
+      color: rgba(255,255,255,0.2);
+      font-size: 12px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
     }
 
     .slide-container {
@@ -262,7 +259,7 @@ const String tvHtmlContent = r'''
       text-align: center;
     }
 
-    /* ── Logo styles ── */
+    /* ── Logo styles (CHANGE #1: true full-screen logo) ── */
     .logo-container {
       position: fixed;
       inset: 0;
@@ -273,12 +270,13 @@ const String tvHtmlContent = r'''
       justify-content: center;
       width: 100vw;
       height: 100vh;
-      padding: 2vh 2vw;
+      padding: 0;
+      background: #000;
     }
     .logo-container img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
       filter: drop-shadow(0 4px 30px rgba(0,0,0,0.8));
     }
     .logo-glow {
@@ -290,6 +288,48 @@ const String tvHtmlContent = r'''
       pointer-events: none;
     }
 
+    /* ── Welcome screen styles (CHANGE #3) ── */
+    .welcome-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+      padding: 4vh 4vw;
+      gap: 3vh;
+    }
+    .welcome-screen img {
+      max-width: 45vw;
+      max-height: 45vh;
+      object-fit: contain;
+      transition: all 0.5s ease;
+    }
+    .welcome-screen.has-message {
+      justify-content: flex-end;
+      padding-bottom: 12vh;
+    }
+    .welcome-screen.has-message img {
+      max-width: 35vw;
+      max-height: 35vh;
+    }
+    .welcome-message {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(18px, 3vw, 36px);
+      color: #2a2a2a;
+      text-align: center;
+      letter-spacing: 0.15em;
+      font-weight: 400;
+      animation: welcomeFadeIn 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    @keyframes welcomeFadeIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Idle screen (CHANGE #5: improved elegance) ── */
     #idle-screen {
       display: flex; flex-direction: column;
       align-items: center; gap: 24px;
@@ -298,6 +338,11 @@ const String tvHtmlContent = r'''
       width: 64px; height: 64px;
       position: relative;
       opacity: 0.25;
+      animation: idleCrossPulse 4s ease-in-out infinite;
+    }
+    @keyframes idleCrossPulse {
+      0%, 100% { opacity: 0.18; transform: scale(1); filter: drop-shadow(0 0 0px rgba(201,169,110,0)); }
+      50% { opacity: 0.4; transform: scale(1.08); filter: drop-shadow(0 0 18px rgba(201,169,110,0.25)); }
     }
     .idle-cross::before, .idle-cross::after {
       content: ''; position: absolute;
@@ -312,32 +357,40 @@ const String tvHtmlContent = r'''
       letter-spacing: 0.4em;
       color: rgba(255,255,255,0.2);
       text-transform: uppercase;
+      text-shadow: 0 0 24px rgba(201,169,110,0.15), 0 0 60px rgba(201,169,110,0.08);
+      animation: idleLabelGlow 4s ease-in-out infinite;
+    }
+    @keyframes idleLabelGlow {
+      0%, 100% { text-shadow: 0 0 24px rgba(201,169,110,0.1), 0 0 60px rgba(201,169,110,0.05); }
+      50% { text-shadow: 0 0 30px rgba(201,169,110,0.25), 0 0 70px rgba(201,169,110,0.12); }
     }
 
+    /* ── Status badge (CHANGE #6: more subtle) ── */
     #status-badge {
       position: fixed; top: 24px; right: 24px;
       z-index: 50;
       display: flex; align-items: center; gap: 8px;
       font-family: 'Cinzel', serif;
-      font-size: 9px;
+      font-size: 8px;
       letter-spacing: 0.25em;
       text-transform: uppercase;
-      color: rgba(255,255,255,0.3);
-      background: rgba(10,10,15,0.7);
-      border: 1px solid rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.2);
+      background: rgba(10,10,15,0.5);
+      border: 1px solid rgba(255,255,255,0.04);
       backdrop-filter: blur(12px);
-      padding: 6px 14px;
+      padding: 5px 12px;
       border-radius: 100px;
+      transition: opacity 0.5s ease;
     }
     #status-dot {
-      width: 7px; height: 7px;
+      width: 6px; height: 6px;
       border-radius: 50%;
       background: #ef4444;
       animation: pulse-dot 2s ease-in-out infinite;
     }
     #status-dot.online {
       background: #22c55e;
-      box-shadow: 0 0 8px #22c55e;
+      box-shadow: 0 0 6px rgba(34,197,94,0.5);
       animation: none;
     }
     @keyframes pulse-dot {
@@ -348,27 +401,35 @@ const String tvHtmlContent = r'''
       position: fixed; top: 24px; left: 24px;
       z-index: 50;
       font-family: 'Cinzel', serif;
-      font-size: 9px;
+      font-size: 8px;
       letter-spacing: 0.3em;
       text-transform: uppercase;
-      color: rgba(201,169,110,0.35);
+      color: rgba(201,169,110,0.25);
       display: flex; align-items: center; gap: 8px;
+      transition: opacity 0.5s ease;
     }
     #brand-badge::before {
       content: '';
-      width: 6px; height: 6px;
+      width: 5px; height: 5px;
       border-radius: 50%;
       background: #22c55e;
-      box-shadow: 0 0 6px #22c55e;
+      box-shadow: 0 0 5px rgba(34,197,94,0.4);
       animation: pulse-dot 3s ease-in-out infinite;
     }
 
+    /* ── Fade-in animation (CHANGE #6: improved) ── */
     .fade-in {
-      animation: fadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
     @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(24px); }
+      from { opacity: 0; transform: translateY(18px); }
       to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── State transition helper ── */
+    .state-transitioning {
+      opacity: 0;
+      transition: opacity 0.25s ease;
     }
 
     /* ── PDF / PPTX Viewer ── */
@@ -378,6 +439,7 @@ const String tvHtmlContent = r'''
       background: #000;
       justify-content: center;
       align-items: center;
+      transition: opacity 0.4s ease;
     }
     #doc-viewer.active {
       display: flex;
@@ -466,26 +528,26 @@ const String tvHtmlContent = r'''
         padding: 2vh 4vw;
       }
 
-      /* Smaller badges on mobile */
       #status-badge {
         top: 10px; right: 10px;
         font-size: 7px;
-        padding: 4px 10px;
-        gap: 5px;
+        padding: 3px 8px;
+        gap: 4px;
+        color: rgba(255,255,255,0.15);
       }
       #status-dot {
-        width: 5px; height: 5px;
+        width: 4px; height: 4px;
       }
       #brand-badge {
         top: 10px; left: 10px;
         font-size: 7px;
         gap: 5px;
+        color: rgba(201,169,110,0.2);
       }
       #brand-badge::before {
-        width: 5px; height: 5px;
+        width: 4px; height: 4px;
       }
 
-      /* Ornament smaller on mobile */
       .ornament {
         margin: 12px 0;
         font-size: 14px;
@@ -495,25 +557,21 @@ const String tvHtmlContent = r'''
         max-width: 60px;
       }
 
-      /* Verse reference smaller on mobile */
       .verse-ref {
         font-size: clamp(10px, 3.5vw, 16px);
         letter-spacing: 0.2em;
       }
 
-      /* Song counter smaller on mobile */
       .song-stanza-counter {
         font-size: 9px;
         margin-top: 8px;
       }
 
-      /* Slide subtitle smaller on mobile */
       .slide-subtitle {
         font-size: clamp(8px, 2.5vw, 12px);
         margin-bottom: 10px;
       }
 
-      /* Idle screen smaller cross on mobile */
       .idle-cross {
         width: 44px; height: 44px;
       }
@@ -524,12 +582,10 @@ const String tvHtmlContent = r'''
         letter-spacing: 0.25em;
       }
 
-      /* Hide page indicator on mobile — mobile nav already shows page info */
       #page-indicator {
         display: none !important;
       }
 
-      /* Doc loading spinner smaller on mobile */
       .loading-spinner {
         width: 30px; height: 30px;
         border-width: 2px;
@@ -538,18 +594,29 @@ const String tvHtmlContent = r'''
         font-size: 10px;
       }
 
-      /* Logo less padding on mobile */
       .logo-container {
-        padding: 1vh 1vw;
+        padding: 0;
       }
       .logo-glow {
         width: 80vw;
         height: 50vh;
       }
 
-      /* Verse container narrower on mobile */
       .verse-container {
         max-width: 100%;
+      }
+
+      /* Welcome screen mobile (CHANGE #4) */
+      .welcome-screen img {
+        max-width: 70vw;
+        max-height: 40vh;
+      }
+      .welcome-screen.has-message img {
+        max-width: 55vw;
+        max-height: 30vh;
+      }
+      .welcome-message {
+        font-size: clamp(14px, 4vw, 22px);
       }
 
       /* ── Mobile-specific nav buttons ── */
@@ -625,6 +692,14 @@ const String tvHtmlContent = r'''
         font-size: 9px;
         min-width: 55px;
       }
+      .welcome-screen img {
+        max-width: 40vw;
+        max-height: 60vh;
+      }
+      .welcome-screen.has-message img {
+        max-width: 30vw;
+        max-height: 45vh;
+      }
     }
 
     /* ── Desktop: hide mobile nav ── */
@@ -694,6 +769,7 @@ const String tvHtmlContent = r'''
   let ws, reconnectTimer;
   let state = { type: 'idle', content: null, fontSize: 44 };
   let currentAnimBg = '';
+  let prevStateType = '';
 
   // ── PDF state ──
   let pdfDoc = null;
@@ -723,7 +799,7 @@ const String tvHtmlContent = r'''
   function updateMobileNav() {
     const nav = document.getElementById('mobile-nav');
     const navInfo = document.getElementById('nav-info');
-    if (!isMobile() || state.type === 'idle' || state.type === 'logo') {
+    if (!isMobile() || state.type === 'idle' || state.type === 'logo' || state.type === 'welcome') {
       nav.classList.remove('visible');
       return;
     }
@@ -866,9 +942,8 @@ const String tvHtmlContent = r'''
 
       const pageInd = document.getElementById('page-indicator');
       pageInd.textContent = num + ' / ' + pdfTotalPages;
-      // Show briefly then auto-hide (peek animation)
       pageInd.classList.remove('peek');
-      void pageInd.offsetWidth; // force reflow to restart animation
+      void pageInd.offsetWidth;
       pageInd.classList.add('peek');
     } catch (e) {
       console.error('[TV] PDF render error:', e);
@@ -944,6 +1019,16 @@ const String tvHtmlContent = r'''
           <p class="idle-label">BiblePresenter</p>
         </div>`;
 
+    } else if (state.type === 'welcome') {
+      closeDocViewer();
+      const c = state.content || {};
+      const hasMessage = c.message && c.message.trim().length > 0;
+      stage.innerHTML = `
+        <div class="welcome-screen ${hasMessage ? 'has-message' : ''} fade-in">
+          ${c.logo ? `<img src="${c.logo}" alt="Church Logo" />` : ''}
+          ${hasMessage ? `<p class="welcome-message">${c.message}</p>` : ''}
+        </div>`;
+
     } else if (state.type === 'verse') {
       closeDocViewer();
       const c = state.content || {};
@@ -956,7 +1041,7 @@ const String tvHtmlContent = r'''
 
       stage.innerHTML = `
         <div class="verse-container fade-in" style="max-width:${maxW};width:100%">
-          ${hasHi ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:${hasEn?'12px':'20px'}">${c.textHi}</p>` : ''}<br/>
+          ${hasHi ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:${hasEn?'12px':'20px'}">${c.textHi}</p>` : ''}
           ${hasEn ? `<p class="verse-en" style="font-size:${enPx};margin-bottom:16px">${c.textEn}</p>` : ''}
           ${!hasHi && c.text ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:16px">"${c.text}"</p>` : ''}
           ${hasHi && hasEn ? `<div class="ornament">&#10022;</div>` : ''}
@@ -981,7 +1066,6 @@ const String tvHtmlContent = r'''
 
       if (c.image) {
         if (mobile) {
-          // Mobile: stacked layout (image on top, text below)
           stage.innerHTML = `
             <div class="fade-in" style="display:flex;flex-direction:column;align-items:center;width:100%;gap:16px">
               <img src="${c.image}" style="max-height:40vh;object-fit:contain;border-radius:8px;border:1px solid rgba(255,255,255,0.08);width:100%"/>
@@ -993,7 +1077,6 @@ const String tvHtmlContent = r'''
               </div>
             </div>`;
         } else {
-          // TV/Desktop: side-by-side layout
           stage.innerHTML = `
             <div class="fade-in" style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;width:100%;max-width:1400px">
               <img src="${c.image}" style="max-height:65vh;object-fit:contain;border-radius:12px;border:1px solid rgba(255,255,255,0.08)"/>
@@ -1022,16 +1105,15 @@ const String tvHtmlContent = r'''
       const stanzas = c.stanzas || [];
       const currentIdx = c.currentStanza || 0;
       const totalStanzas = c.totalStanzas || stanzas.length;
-      const songTitle = c.title || '';
       const currentStanza = stanzas[currentIdx] || '';
       const stanzaText = currentStanza.replace(/\\n/g, '<br/>').replace(/\n/g, '<br/>');
       const textLen = currentStanza.length;
       const stanzaFs = songFontSize(textLen, state.fontSize) + 'px';
       const maxW = mobile ? '100%' : '1500px';
 
+      // Song title is NEVER shown on TV — only lyrics and stanza counter
       stage.innerHTML = `
         <div class="verse-container fade-in" style="max-width:${maxW};width:100%">
-          ${mobile && songTitle ? `<p class="song-title">${songTitle}</p>` : ''}
           <p class="verse-hi" style="font-size:${stanzaFs};line-height:1.8;letter-spacing:0.01em;white-space:pre-line">${stanzaText}</p>
           <p class="song-stanza-counter">${currentIdx + 1} / ${totalStanzas}</p>
         </div>`;
@@ -1055,13 +1137,11 @@ const String tvHtmlContent = r'''
         closeDocViewer();
         loadPdf(newUrl);
       } else if (pdfDoc && pdfTotalPages > 0) {
-        // Clamp page to valid range [1 .. pdfTotalPages]
         const clampedPage = Math.max(1, Math.min(targetPage, pdfTotalPages));
         if (clampedPage !== pdfPage) {
           pdfPage = clampedPage;
           renderPdfPage(pdfPage);
         }
-        // If app sent an out-of-range page, send back the corrected page
         if (clampedPage !== targetPage && ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ event: 'pdf-page', data: { page: clampedPage, totalPages: pdfTotalPages } }));
         }
@@ -1081,7 +1161,7 @@ const String tvHtmlContent = r'''
       }
     }
 
-    // Update mobile nav after render
+    prevStateType = state.type;
     updateMobileNav();
   }
 
@@ -1122,10 +1202,6 @@ const String tvHtmlContent = r'''
       renderPdfPage(pdfPage);
       ws.send(JSON.stringify({ event: 'pdf-page', data: { page: pdfPage, totalPages: pdfTotalPages } }));
       updateMobileNav();
-    } else if (state.type === 'verse') {
-      // Request previous verse from app — handled by app
-    } else if (state.type === 'song') {
-      // Request previous stanza from app
     }
   }
 
@@ -1135,10 +1211,6 @@ const String tvHtmlContent = r'''
       renderPdfPage(pdfPage);
       ws.send(JSON.stringify({ event: 'pdf-page', data: { page: pdfPage, totalPages: pdfTotalPages } }));
       updateMobileNav();
-    } else if (state.type === 'verse') {
-      // Request next verse from app — handled by app
-    } else if (state.type === 'song') {
-      // Request next stanza from app
     }
   }
 
@@ -1160,13 +1232,10 @@ const String tvHtmlContent = r'''
     const diffY = touchStartY - touchEndY;
     const elapsed = Date.now() - touchStartTime;
 
-    // Only detect horizontal swipes (not vertical scrolls)
     if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50 && elapsed < 500) {
       if (diffX > 0) {
-        // Swipe left → next
         handleNext();
       } else {
-        // Swipe right → previous
         handlePrev();
       }
     }
