@@ -24,6 +24,8 @@ dependencies:
   path_provider: ^2.1.0
   # Shared preferences for persistent storage
   shared_preferences: ^2.2.0
+  # State management
+  provider: ^6.1.0
 
 dev_dependencies:
   flutter_test:

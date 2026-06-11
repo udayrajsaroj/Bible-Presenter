@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
@@ -41,7 +40,8 @@ String _contentType(String filename) {
   const types = {
     'pdf': 'application/pdf',
     'ppt': 'application/vnd.ms-powerpoint',
-    'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'pptx':
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     'png': 'image/png',
     'jpg': 'image/jpeg',
     'jpeg': 'image/jpeg',
@@ -86,33 +86,42 @@ Future<void> startServer(dynamic message) async {
   }
 
   // ── Serve TV page ──
-  router.get('/', (Request req) => _cors(Response.ok(
-    tvHtmlContent,
-    headers: {'Content-Type': 'text/html; charset=utf-8'},
-  )));
-  router.get('/tv.html', (Request req) => _cors(Response.ok(
-    tvHtmlContent,
-    headers: {'Content-Type': 'text/html; charset=utf-8'},
-  )));
+  router.get(
+      '/',
+      (Request req) => _cors(Response.ok(
+            tvHtmlContent,
+            headers: {'Content-Type': 'text/html; charset=utf-8'},
+          )));
+  router.get(
+      '/tv.html',
+      (Request req) => _cors(Response.ok(
+            tvHtmlContent,
+            headers: {'Content-Type': 'text/html; charset=utf-8'},
+          )));
 
   // ── REST: current state ──
-  router.get('/api/state', (Request req) => _cors(Response.ok(
-    jsonEncode(_currentState),
-    headers: {'Content-Type': 'application/json'},
-  )));
+  router.get(
+      '/api/state',
+      (Request req) => _cors(Response.ok(
+            jsonEncode(_currentState),
+            headers: {'Content-Type': 'application/json'},
+          )));
 
   // ── Health check ──
-  router.get('/api/health', (Request req) => _cors(Response.ok(
-    jsonEncode({'status': 'ok', 'clients': _clients.length}),
-    headers: {'Content-Type': 'application/json'},
-  )));
+  router.get(
+      '/api/health',
+      (Request req) => _cors(Response.ok(
+            jsonEncode({'status': 'ok', 'clients': _clients.length}),
+            headers: {'Content-Type': 'application/json'},
+          )));
 
   // ── List uploaded files ──
   router.get('/api/uploads', (Request req) async {
     try {
       final dir = Directory(_uploadDir);
       if (!dir.existsSync()) {
-        return _cors(Response.ok(jsonEncode([]), headers: {'Content-Type': 'application/json'}));
+        return _cors(Response.ok(jsonEncode([]),
+            headers: {'Content-Type': 'application/json'}));
       }
       final imageExts = ['jpg', 'jpeg', 'png', 'webp', 'bmp'];
       final files = <Map<String, dynamic>>[];
@@ -121,13 +130,21 @@ Future<void> startServer(dynamic message) async {
           final name = entity.path.split('/').last;
           final ext = name.split('.').last.toLowerCase();
           final stat = entity.statSync();
-          files.add({'name': name, 'url': '/uploads/$name', 'type': imageExts.contains(ext) ? 'image' : _fileType(name), 'size': stat.size, 'modified': stat.modified.toIso8601String()});
+          files.add({
+            'name': name,
+            'url': '/uploads/$name',
+            'type': imageExts.contains(ext) ? 'image' : _fileType(name),
+            'size': stat.size,
+            'modified': stat.modified.toIso8601String()
+          });
         }
       }
       files.sort((a, b) => b['modified'].compareTo(a['modified']));
-      return _cors(Response.ok(jsonEncode(files), headers: {'Content-Type': 'application/json'}));
+      return _cors(Response.ok(jsonEncode(files),
+          headers: {'Content-Type': 'application/json'}));
     } catch (_) {
-      return _cors(Response.ok(jsonEncode([]), headers: {'Content-Type': 'application/json'}));
+      return _cors(Response.ok(jsonEncode([]),
+          headers: {'Content-Type': 'application/json'}));
     }
   });
 
@@ -224,11 +241,13 @@ Future<void> startServer(dynamic message) async {
         try {
           final msg = jsonDecode(raw as String) as Map<String, dynamic>;
           final event = msg['event'] as String? ?? '';
-          final data  = msg['data']  as Map<String, dynamic>? ?? {};
+          final data = msg['data'] as Map<String, dynamic>? ?? {};
 
           switch (event) {
             case 'get-state':
-              try { channel.sink.add(jsonEncode(_currentState)); } catch (_) {}
+              try {
+                channel.sink.add(jsonEncode(_currentState));
+              } catch (_) {}
               break;
 
             case 'cast-verse':
@@ -303,19 +322,28 @@ Future<void> startServer(dynamic message) async {
 
             case 'pdf-loaded':
               // TV reports back total pages after PDF loads
-              if (_currentState['type'] == 'pdf' && _currentState['content'] != null) {
-                (_currentState['content'] as Map<String, dynamic>)['totalPages'] = data['totalPages'] ?? 0;
-                (_currentState['content'] as Map<String, dynamic>)['currentPage'] = data['currentPage'] ?? 1;
+              if (_currentState['type'] == 'pdf' &&
+                  _currentState['content'] != null) {
+                (_currentState['content']
+                        as Map<String, dynamic>)['totalPages'] =
+                    data['totalPages'] ?? 0;
+                (_currentState['content']
+                        as Map<String, dynamic>)['currentPage'] =
+                    data['currentPage'] ?? 1;
                 _broadcast(_currentState);
               }
               break;
 
             case 'pdf-page':
-              if (_currentState['type'] == 'pdf' || _currentState['type'] == 'pptx') {
-                (_currentState['content'] as Map<String, dynamic>)['currentPage'] = data['page'] ?? 1;
+              if (_currentState['type'] == 'pdf' ||
+                  _currentState['type'] == 'pptx') {
+                (_currentState['content']
+                    as Map<String, dynamic>)['currentPage'] = data['page'] ?? 1;
                 // Also update totalPages if TV sent it (keeps app in sync)
                 if (data['totalPages'] != null) {
-                  (_currentState['content'] as Map<String, dynamic>)['totalPages'] = data['totalPages'];
+                  (_currentState['content']
+                          as Map<String, dynamic>)['totalPages'] =
+                      data['totalPages'];
                 }
                 _broadcast(_currentState);
               }
@@ -357,9 +385,8 @@ Future<void> startServer(dynamic message) async {
 
   router.get('/ws', (Request req) => wsHandler(req));
 
-  final handler = Pipeline()
-      .addMiddleware(logRequests())
-      .addHandler(router.call);
+  final handler =
+      Pipeline().addMiddleware(logRequests()).addHandler(router.call);
 
   try {
     final server = await shelf_io.serve(handler, '0.0.0.0', 3000);
