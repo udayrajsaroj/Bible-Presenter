@@ -43,11 +43,27 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
 
   void _safeNotify() {
     if (_disposed) return;
-    try {
-      notifyListeners();
-    } catch (_) {
-      // Defensive: never let a stray listener throw propagate up to the
-      // platform channel handler (would crash the isolate).
+    // Ensure notifyListeners is called on the UI thread to avoid issues
+    // when called from platform channel isolates.
+    if (WidgetsBinding.instance != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_disposed) {
+          try {
+            notifyListeners();
+          } catch (_) {
+            // Defensive: never let a stray listener throw propagate up to the
+            // platform channel handler (would crash the isolate).
+          }
+        }
+      });
+    } else {
+      // Fallback for cases where WidgetsBinding is not available (e.g., tests)
+      try {
+        notifyListeners();
+      } catch (_) {
+        // Defensive: never let a stray listener throw propagate up to the
+        // platform channel handler (would crash the isolate).
+      }
     }
   }
 
