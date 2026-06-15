@@ -1876,6 +1876,10 @@ class _ControllerPageState extends State<ControllerPage>
     for (final c in _songStanzaCtrls) {
       c.dispose();
     }
+    // Mark cast service as disposed FIRST so any pending native callbacks
+    // (e.g. onDisconnected arriving on app close) become no-ops. Then
+    // tear down the native side without awaiting — we're shutting down.
+    _castService.markDisposed();
     _castService.disposeAll();
     super.dispose();
   }
@@ -2171,55 +2175,52 @@ class _ControllerPageState extends State<ControllerPage>
                   onDeleteSlide: _deleteSlide,
                   onShowAddSlideModal: _showAddSlideModal,
                   onOpenFullscreen: _openSlidesFullscreen),
-              BibleTab(
-                  bible: BibleState.of(context).bible,
-                  bibleLoaded: BibleState.of(context).bibleLoaded,
-                  selBook: BibleState.of(context).selectedBook,
-                  selChapter: BibleState.of(context).selectedChapter,
-                  selVerse: BibleState.of(context).selectedVerse,
-                  fontSize: BibleState.of(context).fontSize,
-                  onBookChanged: (val) =>
-                      BibleState.of(context).selectedBook = val,
-                  onChapterChanged: (val) =>
-                      BibleState.of(context).selectedChapter = val,
-                  onVerseChanged: (val) =>
-                      BibleState.of(context).selectedVerse = val,
-                  onCastVerse: _castVerse,
-                  onPrevVerse: _prevVerse,
-                  onNextVerse: _nextVerse,
-                  onFontSizeChanged: (v) => BibleState.of(context).fontSize = v,
-                  onOpenFullscreen: _openBibleFullscreen),
-              SongsTab(
-                  allSongs: SongState.of(context).allSongs,
-                  filteredSongs: SongState.of(context).filteredSongs,
-                  songsLoaded: SongState.of(context).songsLoaded,
-                  songSearchQuery: SongState.of(context).songSearchQuery,
-                  selectedSongIndex: SongState.of(context).selectedSongIndex,
-                  selectedStanzaIndex:
-                      SongState.of(context).selectedStanzaIndex,
-                  songSearchCtrl: SongState.of(context).songSearchController,
-                  onFilterSongs: (query) =>
-                      SongState.of(context).songSearchQuery = query,
-                  onShowAddSongModal: _showAddSongModal,
-                  onShowCreateScheduleModal: _showCreateScheduleModal,
-                  onDeleteSong: _deleteSong,
-                  onSelectSong: (i) =>
-                      SongState.of(context).selectedSongIndex = i,
-                  onSelectStanza: (i) {
-                    SongState.of(context).selectedStanzaIndex = i;
-                    _castSong();
-                  },
-                  onCastSong: _castSong,
-                  onPrevStanza: _prevStanza,
-                  onNextStanza: _nextStanza,
-                  onOpenFullscreen: _openSongsFullscreen,
-                  schedules: ScheduleState.of(context).schedules,
-                  scheduleMode: ScheduleState.of(context).scheduleMode,
-                  activeScheduleIndex:
-                      ScheduleState.of(context).activeScheduleIndex,
-                  onOpenScheduleDetail: _openScheduleDetail,
-                  onDeleteSchedule: _deleteSchedule,
-                  onStartSchedulePresentation: _startSchedulePresentation),
+              Consumer<BibleState>(
+                builder: (context, bible, _) => BibleTab(
+                    bible: bible.bible,
+                    bibleLoaded: bible.bibleLoaded,
+                    selBook: bible.selectedBook,
+                    selChapter: bible.selectedChapter,
+                    selVerse: bible.selectedVerse,
+                    fontSize: bible.fontSize,
+                    onBookChanged: (val) => bible.selectedBook = val,
+                    onChapterChanged: (val) => bible.selectedChapter = val,
+                    onVerseChanged: (val) => bible.selectedVerse = val,
+                    onCastVerse: _castVerse,
+                    onPrevVerse: _prevVerse,
+                    onNextVerse: _nextVerse,
+                    onFontSizeChanged: (v) => bible.fontSize = v,
+                    onOpenFullscreen: _openBibleFullscreen),
+              ),
+              Consumer2<SongState, ScheduleState>(
+                builder: (context, songs, schedules, _) => SongsTab(
+                    allSongs: songs.allSongs,
+                    filteredSongs: songs.filteredSongs,
+                    songsLoaded: songs.songsLoaded,
+                    songSearchQuery: songs.songSearchQuery,
+                    selectedSongIndex: songs.selectedSongIndex,
+                    selectedStanzaIndex: songs.selectedStanzaIndex,
+                    songSearchCtrl: songs.songSearchController,
+                    onFilterSongs: (query) => songs.songSearchQuery = query,
+                    onShowAddSongModal: _showAddSongModal,
+                    onShowCreateScheduleModal: _showCreateScheduleModal,
+                    onDeleteSong: _deleteSong,
+                    onSelectSong: (i) => songs.selectedSongIndex = i,
+                    onSelectStanza: (i) {
+                      songs.selectedStanzaIndex = i;
+                      _castSong();
+                    },
+                    onCastSong: _castSong,
+                    onPrevStanza: _prevStanza,
+                    onNextStanza: _nextStanza,
+                    onOpenFullscreen: _openSongsFullscreen,
+                    schedules: schedules.schedules,
+                    scheduleMode: schedules.scheduleMode,
+                    activeScheduleIndex: schedules.activeScheduleIndex,
+                    onOpenScheduleDetail: _openScheduleDetail,
+                    onDeleteSchedule: _deleteSchedule,
+                    onStartSchedulePresentation: _startSchedulePresentation),
+              ),
               FilesTab(
                   uploadedFiles: _uploadedFiles,
                   isUploading: _isUploading,
@@ -2233,47 +2234,49 @@ class _ControllerPageState extends State<ControllerPage>
                   onPdfPrevPage: _pdfPrevPage,
                   onPdfNextPage: _pdfNextPage,
                   onOpenFullscreen: _openFilesFullscreen),
-              SettingsTab(
-                  fontSize: BibleState.of(context).fontSize,
-                  onFontSizeChanged: (v) => BibleState.of(context).fontSize = v,
-                  welcomeMessage: _welcomeMessage,
-                  welcomeMsgCtrl: _welcomeMsgCtrl,
-                  onWelcomeMessageChanged: (val) async {
-                    setState(() => _welcomeMessage = val);
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setString('welcome_message', val);
-                  },
-                  onCastWelcome: _castWelcome,
-                  onClearScreen: _clearScreen,
-                  customLogoPath: _customLogoPath,
-                  onUploadCustomLogo: _uploadCustomLogo,
-                  onRemoveCustomLogo: () async {
-                    final confirmed = await _confirmDelete('custom logo');
-                    if (!confirmed) return;
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.remove('custom_logo_base64');
-                    setState(() => _customLogoPath = '');
-                    _showSnack('Custom logo removed');
-                  },
-                  onCastLogo: _castLogo,
-                  bgUrl: _bgUrl,
-                  onBgUrlChanged: (url) {
-                    setState(() => _bgUrl = url);
-                    if (url != null)
-                      _emit('update-background', {'url': url});
-                    else
-                      _emit('update-background', {});
-                  },
-                  isUploadingBg: _isUploadingBg,
-                  onUploadBgImage: _uploadBgImage,
-                  uploadedBgs: _uploadedBgs,
-                  onDeleteUploadedBg: _deleteUploadedBg,
-                  serverStarted: _serverStarted,
-                  connected: _connected,
-                  deviceIp: _deviceIp,
-                  onRefreshIp: _refreshIp,
-                  onConnectWS: _connectWS,
-                  onCopyUrl: _copyUrl),
+              Consumer<BibleState>(
+                builder: (context, bible, _) => SettingsTab(
+                    fontSize: bible.fontSize,
+                    onFontSizeChanged: (v) => bible.fontSize = v,
+                    welcomeMessage: _welcomeMessage,
+                    welcomeMsgCtrl: _welcomeMsgCtrl,
+                    onWelcomeMessageChanged: (val) async {
+                      setState(() => _welcomeMessage = val);
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setString('welcome_message', val);
+                    },
+                    onCastWelcome: _castWelcome,
+                    onClearScreen: _clearScreen,
+                    customLogoPath: _customLogoPath,
+                    onUploadCustomLogo: _uploadCustomLogo,
+                    onRemoveCustomLogo: () async {
+                      final confirmed = await _confirmDelete('custom logo');
+                      if (!confirmed) return;
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.remove('custom_logo_base64');
+                      setState(() => _customLogoPath = '');
+                      _showSnack('Custom logo removed');
+                    },
+                    onCastLogo: _castLogo,
+                    bgUrl: _bgUrl,
+                    onBgUrlChanged: (url) {
+                      setState(() => _bgUrl = url);
+                      if (url != null)
+                        _emit('update-background', {'url': url});
+                      else
+                        _emit('update-background', {});
+                    },
+                    isUploadingBg: _isUploadingBg,
+                    onUploadBgImage: _uploadBgImage,
+                    uploadedBgs: _uploadedBgs,
+                    onDeleteUploadedBg: _deleteUploadedBg,
+                    serverStarted: _serverStarted,
+                    connected: _connected,
+                    deviceIp: _deviceIp,
+                    onRefreshIp: _refreshIp,
+                    onConnectWS: _connectWS,
+                    onCopyUrl: _copyUrl),
+              ),
             ],
           ),
         ),

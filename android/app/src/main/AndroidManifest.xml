@@ -5,6 +5,12 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
+    <!-- Required for NSD / mDNS service discovery on Android 9+ (API 28+).
+         Without it, NsdManager.discoverServices() silently fails and the
+         cast scan returns no devices. Some OEM ROMs also throw a
+         SecurityException that crashes the app. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
         android:label="BiblePresenter"

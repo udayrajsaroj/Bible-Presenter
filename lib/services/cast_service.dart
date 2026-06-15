@@ -1,5 +1,9 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart'
+    show MethodChannel, MissingPluginException, PlatformException;
+import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'cast_api.g.dart';
 
 // ══════════════════════════════════════════════════════════════
@@ -22,6 +26,31 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
   // ── Pigeon Host API instance ──
   final CastHostApi _hostApi = CastHostApi();
 
+  // ── Disposal guard ──
+  // Native callbacks can arrive after the host widget has been disposed
+  // (e.g. user backs out while a Cast session is tearing down). Calling
+  // notifyListeners() on a disposed ChangeNotifier throws a FlutterError.
+  // All notifyListeners() calls are routed through _safeNotify which
+  // bails out if _disposed is true.
+  bool _disposed = false;
+  bool get isDisposed => _disposed;
+
+  /// Mark this service as disposed. Called from the host's dispose().
+  /// After this point, native callbacks become no-ops.
+  void markDisposed() {
+    _disposed = true;
+  }
+
+  void _safeNotify() {
+    if (_disposed) return;
+    try {
+      notifyListeners();
+    } catch (_) {
+      // Defensive: never let a stray listener throw propagate up to the
+      // platform channel handler (would crash the isolate).
+    }
+  }
+
   // ── Discovered devices ──
   final Map<String, CastDevice> _discoveredDevices = {};
 
@@ -34,6 +63,11 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
 
   /// Whether we are currently connected to a cast device.
   bool get isConnected => _isConnected;
+
+  bool _isConnecting = false;
+
+  /// Whether we are currently in the process of connecting to a device.
+  bool get isConnecting => _isConnecting;
 
   String _connectedDeviceId = '';
 
@@ -81,15 +115,57 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
 
   /// Start mDNS / NSD discovery for Chromecast devices.
   /// On iOS, this is a no-op since AVRouteDetector auto-discovers.
+  ///
+  /// On Android 6+ (API 23+), ACCESS_FINE_LOCATION must be granted at
+  /// runtime before NSD discovery will work. If it isn't, we ask the
+  /// host page to request it via [requestAndroidLocationPermission].
+  /// If the host never wired that up, the request silently fails and
+  /// the user will see "No devices found" — but the app won't crash.
   Future<void> startDiscovery() async {
     try {
+      if (!kIsWeb && Platform.isAndroid) {
+        final granted = await _ensureAndroidLocationPermission();
+        if (!granted) {
+          _lastError =
+              'Location permission required to find cast devices. Please enable in Settings.';
+          _isDiscovering = false;
+          _safeNotify();
+          return;
+        }
+      }
       await _hostApi.startDiscovery();
       _isDiscovering = true;
       _lastError = '';
-      notifyListeners();
+      _safeNotify();
     } catch (e) {
       _lastError = 'startDiscovery failed: $e';
-      notifyListeners();
+      _safeNotify();
+    }
+  }
+
+  /// Returns true if location permission is granted (or not needed).
+  /// The host widget should call [setLocationPermissionChannel] to wire
+  /// up the platform-side permission requester.
+  static const _locationPermissionChannel =
+      MethodChannel('biblepresenter/cast_permissions');
+
+  Future<bool> _ensureAndroidLocationPermission() async {
+    try {
+      final status = await _locationPermissionChannel
+          .invokeMethod<String>('checkLocationPermission');
+      if (status == 'granted') return true;
+      final result = await _locationPermissionChannel
+          .invokeMethod<String>('requestLocationPermission');
+      return result == 'granted';
+    } on PlatformException {
+      // If the native side hasn't been implemented yet, fall through
+      // and let the discovery attempt run anyway. Worst case, the user
+      // gets an empty device list rather than a hard error.
+      return true;
+    } on MissingPluginException {
+      return true;
+    } catch (_) {
+      return true;
     }
   }
 
@@ -98,22 +174,27 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
     try {
       await _hostApi.stopDiscovery();
       _isDiscovering = false;
-      notifyListeners();
+      _safeNotify();
     } catch (e) {
       _lastError = 'stopDiscovery failed: $e';
-      notifyListeners();
+      _safeNotify();
     }
   }
 
   /// Connect to a specific cast device by [deviceId].
   Future<void> connectToDevice(String deviceId) async {
     try {
+      _isConnecting = true;
+      _connectedDeviceName = 'Connecting...';
+      _lastError = '';
+      _safeNotify();
+
       await _hostApi.connectToDevice(deviceId);
       // The actual connection confirmation comes via onConnected callback.
-      _lastError = '';
     } catch (e) {
+      _isConnecting = false;
       _lastError = 'connectToDevice failed: $e';
-      notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -125,7 +206,7 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
       _lastError = '';
     } catch (e) {
       _lastError = 'disconnect failed: $e';
-      notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -148,7 +229,7 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
       _lastError = '';
     } catch (e) {
       _lastError = 'loadMedia failed: $e';
-      notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -158,7 +239,7 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
       await _hostApi.play();
     } catch (e) {
       _lastError = 'play failed: $e';
-      notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -168,7 +249,7 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
       await _hostApi.pause();
     } catch (e) {
       _lastError = 'pause failed: $e';
-      notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -178,7 +259,7 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
       await _hostApi.seekTo(positionSeconds);
     } catch (e) {
       _lastError = 'seekTo failed: $e';
-      notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -188,7 +269,7 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
       await _hostApi.setVolume(volume.clamp(0.0, 1.0));
     } catch (e) {
       _lastError = 'setVolume failed: $e';
-      notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -199,7 +280,7 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
       await _hostApi.showAirPlayPicker();
     } catch (e) {
       _lastError = 'showAirPlayPicker failed: $e';
-      notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -209,7 +290,7 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
       return await _hostApi.getConnectedDeviceId();
     } catch (e) {
       _lastError = 'getConnectedDeviceId failed: $e';
-      notifyListeners();
+      _safeNotify();
       return '';
     }
   }
@@ -220,36 +301,60 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
 
   @override
   void onDeviceDiscovered(CastDevice device) {
-    _discoveredDevices[device.deviceId] = device;
-    notifyListeners();
+    // Guard against null/empty fields that occasionally arrive from native
+    // resolve failures (e.g. service resolved with no TXT records).
+    final safeId = device.deviceId.isNotEmpty ? device.deviceId : 'unknown_${DateTime.now().microsecondsSinceEpoch}';
+    final safeName = device.name.isNotEmpty ? device.name : 'Unknown Device';
+    final safePlatform = device.platform.isNotEmpty ? device.platform : 'chromecast';
+    _discoveredDevices[safeId] = CastDevice(
+      deviceId: safeId,
+      name: safeName,
+      platform: safePlatform,
+    );
+    _safeNotify();
   }
 
   @override
   void onDeviceLost(String deviceId) {
     _discoveredDevices.remove(deviceId);
-    notifyListeners();
+    _safeNotify();
   }
 
   @override
   void onPlayerStateChanged(CastPlayerState state) {
-    _playerState = state;
-    notifyListeners();
+    // Sanitize NaN/Inf values that can come from native during buffering.
+    final safePosition = state.position.isFinite ? state.position : 0.0;
+    final safeDuration = state.duration.isFinite ? state.duration : 0.0;
+    final safeVolume = state.volume.isFinite ? state.volume.clamp(0.0, 1.0) : 1.0;
+    _playerState = CastPlayerState(
+      state: state.state.isNotEmpty ? state.state : 'idle',
+      position: safePosition,
+      duration: safeDuration,
+      volume: safeVolume,
+      mediaTitle: state.mediaTitle,
+    );
+    _safeNotify();
   }
 
   @override
   void onConnected(String deviceId) {
     _isConnected = true;
+    _isConnecting = false;
     _connectedDeviceId = deviceId;
     // Look up the human-readable name from discovered devices.
-    _connectedDeviceName =
-        _discoveredDevices[deviceId]?.name ?? deviceId;
+    // Fall back to a placeholder if discovery raced with connection.
+    final discovered = _discoveredDevices[deviceId];
+    _connectedDeviceName = (discovered != null && discovered.name.isNotEmpty)
+        ? discovered.name
+        : 'Connected TV';
     _lastError = '';
-    notifyListeners();
+    _safeNotify();
   }
 
   @override
   void onDisconnected() {
     _isConnected = false;
+    _isConnecting = false;
     _connectedDeviceId = '';
     _connectedDeviceName = '';
     _playerState = CastPlayerState(
@@ -259,13 +364,14 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
       volume: 1.0,
       mediaTitle: '',
     );
-    notifyListeners();
+    _safeNotify();
   }
 
   @override
   void onError(String errorMessage) {
+    _isConnecting = false;
     _lastError = errorMessage;
-    notifyListeners();
+    _safeNotify();
   }
 
   // ────────────────────────────────────────────────────────────
@@ -295,8 +401,14 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
 
   /// Full teardown: disconnect, stop discovery, clear state.
   Future<void> disposeAll() async {
-    await disconnect();
-    await stopDiscovery();
+    // Mark disposed FIRST so any in-flight native callbacks become no-ops.
+    _disposed = true;
+    try {
+      await disconnect();
+    } catch (_) {}
+    try {
+      await stopDiscovery();
+    } catch (_) {}
     _discoveredDevices.clear();
     _isConnected = false;
     _connectedDeviceId = '';
@@ -310,6 +422,8 @@ class CastService extends ChangeNotifier implements CastFlutterApi {
       volume: 1.0,
       mediaTitle: '',
     );
-    notifyListeners();
+    // _safeNotify is now a no-op since _disposed is true, but call it
+    // for symmetry with the rest of the API.
+    _safeNotify();
   }
 }

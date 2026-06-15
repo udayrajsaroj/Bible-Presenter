@@ -59,6 +59,12 @@ class ScheduleState extends ChangeNotifier {
   set scheduleSongIndex(int index) {
     if (_scheduleSongIndex != index && _activeScheduleIndex >= 0) {
       final songs = _schedules[_activeScheduleIndex]['songs'] as List? ?? [];
+      if (songs.isEmpty) {
+        _scheduleSongIndex = 0;
+        _scheduleStanzaIndex = 0;
+        notifyListeners();
+        return;
+      }
       _scheduleSongIndex = index.clamp(0, songs.length - 1);
       _scheduleStanzaIndex = 0;
       notifyListeners();
@@ -71,6 +77,11 @@ class ScheduleState extends ChangeNotifier {
       if (_scheduleSongIndex < songs.length) {
         final stanzas =
             songs[_scheduleSongIndex]['stanzas'] as List<String>? ?? [];
+        if (stanzas.isEmpty) {
+          _scheduleStanzaIndex = 0;
+          notifyListeners();
+          return;
+        }
         _scheduleStanzaIndex = index.clamp(0, stanzas.length - 1);
       }
       notifyListeners();

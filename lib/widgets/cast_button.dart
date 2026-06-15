@@ -72,9 +72,7 @@ class CastButton extends StatelessWidget {
                   Icon(icon, size: 18, color: color),
                 const SizedBox(width: 6),
                 Text(
-                  isConnected
-                      ? castService.connectedDeviceName
-                      : 'Cast',
+                  isConnected ? castService.connectedDeviceName : 'Cast',
                   style: TextStyle(
                     color: isConnected ? kAccent : kMuted,
                     fontSize: 11,
@@ -85,8 +83,8 @@ class CastButton extends StatelessWidget {
                 if (!isConnected && deviceCount > 0) ...[
                   const SizedBox(width: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                     decoration: BoxDecoration(
                       color: kAccent.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(6),
@@ -117,7 +115,7 @@ class CastButton extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       isScrollControlled: true,
-      builder: (sheetContext) => _CastSheet(
+      builder: (sheetContext) => CastSheet(
         castService: castService,
         tvUrl: tvUrl,
       ),
@@ -126,14 +124,14 @@ class CastButton extends StatelessWidget {
 }
 
 // ══════════════════════════════════════════════════════════════
-// _CastSheet — Bottom sheet with device list + controls
+// CastSheet — Bottom sheet with device list + controls
 // ══════════════════════════════════════════════════════════════
 
-class _CastSheet extends StatelessWidget {
+class CastSheet extends StatelessWidget {
   final CastService castService;
   final String? tvUrl;
 
-  const _CastSheet({required this.castService, this.tvUrl});
+  const CastSheet({required this.castService, this.tvUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -223,8 +221,7 @@ class _CastSheet extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.15)),
+                      border: Border.all(color: Colors.white.withOpacity(0.15)),
                     ),
                     child: const Row(children: [
                       Icon(Icons.airplay, size: 22, color: Colors.white70),
@@ -240,8 +237,7 @@ class _CastSheet extends StatelessWidget {
                                     fontWeight: FontWeight.w600)),
                             SizedBox(height: 2),
                             Text('Show native AirPlay picker',
-                                style: TextStyle(
-                                    color: kMuted, fontSize: 10)),
+                                style: TextStyle(color: kMuted, fontSize: 10)),
                           ],
                         ),
                       ),
@@ -298,8 +294,8 @@ class _CastSheet extends StatelessWidget {
                               castService.isDiscovering
                                   ? '${devices.length} device${devices.length != 1 ? 's' : ''} found'
                                   : 'Find Chromecast devices on your network',
-                              style: const TextStyle(
-                                  color: kMuted, fontSize: 10),
+                              style:
+                                  const TextStyle(color: kMuted, fontSize: 10),
                             ),
                           ],
                         ),
@@ -347,13 +343,15 @@ class _CastSheet extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 20),
                   child: const Column(children: [
-                    Icon(Icons.cast_connected, size: 32, color: Color(0xFF1a2d45)),
+                    Icon(Icons.cast_connected,
+                        size: 32, color: Color(0xFF1a2d45)),
                     SizedBox(height: 8),
                     Text('No devices found',
                         style: TextStyle(color: kMuted, fontSize: 12)),
                     SizedBox(height: 4),
                     Text('Make sure your TV and phone are on the same WiFi',
-                        style: TextStyle(color: Color(0xFF1a2d45), fontSize: 10)),
+                        style:
+                            TextStyle(color: Color(0xFF1a2d45), fontSize: 10)),
                   ]),
                 ),
               ],
@@ -367,8 +365,8 @@ class _CastSheet extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Colors.red.shade900.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: Colors.red.shade800.withOpacity(0.3)),
+                    border:
+                        Border.all(color: Colors.red.shade800.withOpacity(0.3)),
                   ),
                   child: Row(children: [
                     Icon(Icons.error_outline,
@@ -415,9 +413,7 @@ class _CastSheet extends StatelessWidget {
               Text(
                 castService.connectedDeviceName,
                 style: const TextStyle(
-                    color: kText,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600),
+                    color: kText, fontSize: 13, fontWeight: FontWeight.w600),
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 2),
@@ -437,7 +433,8 @@ class _CastSheet extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [kAccent, Color(0xFF0284C7)]),
+                gradient:
+                    const LinearGradient(colors: [kAccent, Color(0xFF0284C7)]),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Row(mainAxisSize: MainAxisSize.min, children: [
@@ -479,14 +476,16 @@ class _CastSheet extends StatelessWidget {
             children: [
               // Rewind 10s
               GestureDetector(
-                onTap: () => castService.seekTo((ps.position - 10).clamp(0.0, ps.duration)),
+                onTap: () => castService
+                    .seekTo((ps.position - 10).clamp(0.0, ps.duration)),
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.06),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.replay_10, color: Colors.white54, size: 20),
+                  child: const Icon(Icons.replay_10,
+                      color: Colors.white54, size: 20),
                 ),
               ),
               const SizedBox(width: 12),
@@ -513,14 +512,16 @@ class _CastSheet extends StatelessWidget {
               const SizedBox(width: 12),
               // Forward 10s
               GestureDetector(
-                onTap: () => castService.seekTo((ps.position + 10).clamp(0.0, ps.duration)),
+                onTap: () => castService
+                    .seekTo((ps.position + 10).clamp(0.0, ps.duration)),
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.06),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.forward_10, color: Colors.white54, size: 20),
+                  child: const Icon(Icons.forward_10,
+                      color: Colors.white54, size: 20),
                 ),
               ),
             ],
@@ -530,7 +531,8 @@ class _CastSheet extends StatelessWidget {
           if (ps.duration > 0) ...[
             Row(children: [
               Text(_formatDuration(ps.position),
-                  style: const TextStyle(color: kMuted, fontSize: 9, fontFamily: 'monospace')),
+                  style: const TextStyle(
+                      color: kMuted, fontSize: 9, fontFamily: 'monospace')),
               Expanded(
                 child: SliderTheme(
                   data: SliderThemeData(
@@ -539,7 +541,8 @@ class _CastSheet extends StatelessWidget {
                     inactiveTrackColor: kBorder,
                     overlayColor: kAccent.withOpacity(0.1),
                     trackHeight: 2,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                    thumbShape:
+                        const RoundSliderThumbShape(enabledThumbRadius: 5),
                   ),
                   child: Slider(
                     value: ps.position.clamp(0.0, ps.duration),
@@ -550,7 +553,8 @@ class _CastSheet extends StatelessWidget {
                 ),
               ),
               Text(_formatDuration(ps.duration),
-                  style: const TextStyle(color: kMuted, fontSize: 9, fontFamily: 'monospace')),
+                  style: const TextStyle(
+                      color: kMuted, fontSize: 9, fontFamily: 'monospace')),
             ]),
           ],
         ],
@@ -576,8 +580,7 @@ class _CastSheet extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: (isChromecast ? kAccent : Colors.white)
-                  .withOpacity(0.1),
+              color: (isChromecast ? kAccent : Colors.white).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -617,9 +620,7 @@ class _CastSheet extends StatelessWidget {
             ),
             child: const Text('Connect',
                 style: TextStyle(
-                    color: kAccent,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold)),
+                    color: kAccent, fontSize: 10, fontWeight: FontWeight.bold)),
           ),
         ]),
       ),

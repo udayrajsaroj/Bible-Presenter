@@ -58,7 +58,7 @@ class SongState extends ChangeNotifier {
     if (_songSearchQuery != query) {
       _songSearchQuery = query.toLowerCase().trim();
       _filterSongs();
-      notifyListeners();
+      // _filterSongs() handles notifyListeners() internally
     }
   }
 
@@ -132,11 +132,12 @@ class SongState extends ChangeNotifier {
       }).toList();
     }
     // Reset selection if current song no longer matches filter
-    if (_selectedSongIndex >= _filteredSongs.length) {
-      _selectedSongIndex = 0;
-    }
-    if (_selectedSongIndex < 0) {
+    if (_filteredSongs.isEmpty) {
       _selectedSongIndex = -1;
+    } else if (_selectedSongIndex >= _filteredSongs.length) {
+      _selectedSongIndex = 0;
+    } else if (_selectedSongIndex < 0) {
+      _selectedSongIndex = 0;
     }
     _selectedStanzaIndex = 0;
     notifyListeners();
@@ -192,8 +193,9 @@ class SongState extends ChangeNotifier {
 
   void clearSongControllers() {
     _songTitleController.clear();
+    // Dispose old stanza controllers to avoid memory leaks
     for (final c in _songStanzaControllers) {
-      c.clear();
+      c.dispose();
     }
     _songStanzaControllers.clear();
     _songStanzaControllers

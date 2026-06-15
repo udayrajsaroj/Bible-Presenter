@@ -46,17 +46,20 @@ class BibleState extends ChangeNotifier {
   }
 
   set selectedChapter(int chapter) {
-    if (_bible[_selectedBook]!.containsKey(chapter) &&
-        _selectedChapter != chapter) {
+    final bookChapters = _bible[_selectedBook];
+    if (bookChapters == null) return;
+    if (bookChapters.containsKey(chapter) && _selectedChapter != chapter) {
       _selectedChapter = chapter;
-      _selectedVerse = _bible[_selectedBook]![chapter]!.keys.first;
+      _selectedVerse = bookChapters[chapter]!.keys.first;
       notifyListeners();
     }
   }
 
   set selectedVerse(int verse) {
-    if (_bible[_selectedBook]![_selectedChapter]!.containsKey(verse) &&
-        _selectedVerse != verse) {
+    final bookChapters = _bible[_selectedBook];
+    final chapterVerses = bookChapters?[_selectedChapter];
+    if (chapterVerses == null) return;
+    if (chapterVerses.containsKey(verse) && _selectedVerse != verse) {
       _selectedVerse = verse;
       notifyListeners();
     }
