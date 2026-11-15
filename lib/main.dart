@@ -1079,6 +1079,7 @@ class _ControllerPageState extends State<ControllerPage>
     // when no browser TV is attached. YouTube never travels over DLNA.
     OutputRouter.instance.route(
         event: event, data: data, context: context, currentState: _tvState);
+    _applyOptimisticState(event, data);
     if (_channel == null || !_connected) {
       if (!_dlna.isConnected) {
         _showSnack('Not connected to server! Reconnecting...', error: true);
@@ -1087,6 +1088,64 @@ class _ControllerPageState extends State<ControllerPage>
       return;
     }
     _channel!.sink.add(jsonEncode({'event': event, 'data': data}));
+  }
+
+  /// Mirrors the server's state logic locally so TV Direct-only sessions
+  /// (no browser TV, no WS echo) still know what is on screen — required by
+  /// _castCurrentToDlna and the pre-renderer. The server echo overwrites
+  /// this with identical data when a browser TV is attached.
+  void _applyOptimisticState(String event, Map<String, dynamic> data) {
+    setState(() {
+      switch (event) {
+        case 'cast-verse':
+        case 'cast-slide':
+        case 'cast-song':
+        case 'cast-logo':
+        case 'cast-pdf':
+        case 'cast-pptx':
+          _tvState = {
+            'type': event.substring(5),
+            'content': data,
+            'fontSize': data['fontSize'] ?? _tvState['fontSize'] ?? 44,
+            'background': data['background'] ?? _tvState['background'],
+          };
+          break;
+        case 'cast-welcome':
+          _tvState = {
+            'type': 'welcome',
+            'content': data,
+            'fontSize': _tvState['fontSize'] ?? 44,
+            'background': null,
+          };
+          break;
+        case 'pdf-page':
+          if (_tvState['type'] == 'pdf' || _tvState['type'] == 'pptx') {
+            final c =
+                Map<String, dynamic>.from(_tvState['content'] as Map? ?? {});
+            c['currentPage'] = data['page'] ?? c['currentPage'];
+            if ((data['totalPages'] ?? 0) > 0) {
+              c['totalPages'] = data['totalPages'];
+            }
+            _tvState = {..._tvState, 'content': c};
+          }
+          break;
+        case 'cast-video':
+          _tvState = {
+            'type': 'video',
+            'content': data,
+            'fontSize': _tvState['fontSize'] ?? 44,
+            'background': _tvState['background'],
+          };
+          break;
+        case 'update-background':
+          _tvState = {..._tvState, 'background': data.isEmpty ? null : data};
+          break;
+        case 'clear-screen':
+        case 'video-stop':
+          _tvState = {'type': 'idle'};
+          break;
+      }
+    });
   }
 
   // ── Cast actions ──
@@ -2811,12 +2870,20 @@ class _ControllerPageState extends State<ControllerPage>
           Icon(Icons.circle, size: 7, color: Colors.green.shade400),
           const SizedBox(width: 7),
           Expanded(
-            child: Text('TV Direct · ${_dlna.connectedName}',
-                style: TextStyle(
-                    color: Colors.green.shade300,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis),
+            flex: 4,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('TV Direct · ${_dlna.connectedName}',
+                  style: TextStyle(
+                      color: Colors.green.shade300,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis),
+              Text(
+                  'Slide changes take about a second on TV Direct — Browser Connect is instant',
+                  style: TextStyle(
+                      color: Colors.green.shade600, fontSize: 8),
+                  overflow: TextOverflow.ellipsis),
+            ]),
           ),
           GestureDetector(
             onTap: () async {
