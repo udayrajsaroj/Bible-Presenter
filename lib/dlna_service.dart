@@ -101,7 +101,7 @@ class DlnaService extends ChangeNotifier {
   }
 
   void _handleDeviceFound(DlnaDevice device) {
-    if (!device.deviceType.contains('MediaRenderer')) return;
+    if (!isMediaRenderer(device)) return;
     final i = devices.indexWhere((d) => d.udn.value == device.udn.value);
     if (i >= 0) {
       devices[i] = device;
@@ -110,6 +110,12 @@ class DlnaService extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// Only MediaRenderer devices can be *commanded* to play content.
+  /// MediaServer devices (e.g. BubbleUPnP Server, NAS boxes) only *share*
+  /// content and must be filtered out of the picker.
+  static bool isMediaRenderer(DlnaDevice device) =>
+      device.deviceType.contains('MediaRenderer');
 
   void _handleDeviceLost(DeviceUdn udn) {
     // DeviceUdn is a plain Pigeon data class without ==, compare by value.

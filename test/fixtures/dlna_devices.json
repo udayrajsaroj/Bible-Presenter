@@ -1,0 +1,79 @@
+[
+  {
+    "comment": "Kodi on the dev laptop — the primary development renderer (plan 10.1)",
+    "udn": "uuid:ebf5a1a2-3c4d-5e6f-8081-a2b3c4d5e6f0",
+    "friendlyName": "Kodi (medialaptop)",
+    "deviceType": "urn:schemas-upnp-org:device:MediaRenderer:1",
+    "manufacturer": "Team Kodi",
+    "modelName": "Kodi 21",
+    "ip": "192.168.1.42",
+    "port": 52352,
+    "expectRenderer": true
+  },
+  {
+    "comment": "Samsung Tizen — built-in renderer, usually always on (plan Table 10)",
+    "udn": "uuid:1f2a6c31-9b77-4c20-b144-2c1a1f4b7e55",
+    "friendlyName": "[TV] Samsung 7 Series (65)",
+    "deviceType": "urn:schemas-upnp-org:device:MediaRenderer:1",
+    "manufacturer": "Samsung Electronics",
+    "modelName": "UN65NU7100",
+    "ip": "192.168.1.60",
+    "port": 7676,
+    "expectRenderer": true
+  },
+  {
+    "comment": "LG webOS — SmartShare / Home Dashboard renderer",
+    "udn": "uuid:04cf3d2a-9e5b-11ef-9d1a-3b7e5f2c8d90",
+    "friendlyName": "LG Smart TV",
+    "deviceType": "urn:schemas-upnp-org:device:MediaRenderer:3",
+    "manufacturer": "LG Electronics",
+    "modelName": "OLED55C9",
+    "ip": "192.168.1.61",
+    "port": 1900,
+    "expectRenderer": true
+  },
+  {
+    "comment": "Sony Bravia — renderer present only after 'Rendered via network: ON'",
+    "udn": "uuid:aa71c9f0-5d3e-4f21-9a86-6b2c1e4d7f30",
+    "friendlyName": "BRAVIA 4K GB",
+    "deviceType": "urn:schemas-upnp-org:device:MediaRenderer:1",
+    "manufacturer": "Sony Corporation",
+    "modelName": "KD-55X80J",
+    "ip": "192.168.1.62",
+    "port": 60153,
+    "expectRenderer": true
+  },
+  {
+    "comment": "BubbleUPnP Server — a MediaServer, NOT a renderer: must be filtered out",
+    "udn": "uuid:bubble-1a2b-3c4d-5e6f-7a8b9c0d1e2f",
+    "friendlyName": "BubbleUPnP Server (medialaptop)",
+    "deviceType": "urn:schemas-upnp-org:device:MediaServer:1",
+    "manufacturer": "Bubblesoft",
+    "modelName": "BubbleUPnP Server",
+    "ip": "192.168.1.42",
+    "port": 57623,
+    "expectRenderer": false
+  },
+  {
+    "comment": "Router UPnP InternetGatewayDevice — never a cast target",
+    "udn": "uuid:igd-9f8e-7d6c-5b4a-321fedcba098",
+    "friendlyName": "TP-Link Archer C7",
+    "deviceType": "urn:schemas-upnp-org:device:InternetGatewayDevice:1",
+    "manufacturer": "TP-Link",
+    "modelName": "Archer C7",
+    "ip": "192.168.1.1",
+    "port": 5000,
+    "expectRenderer": false
+  },
+  {
+    "comment": "Android TV / Google TV — weak or absent renderer (risk R2), still discoverable when present",
+    "udn": "uuid:2a7c8d9e-0f1a-4b2c-8d3e-5f6a7b8c9d0e",
+    "friendlyName": "Living Room Android TV",
+    "deviceType": "urn:schemas-upnp-org:device:MediaRenderer:1",
+    "manufacturer": "Google",
+    "modelName": "Chromecast with Google TV",
+    "ip": "192.168.1.63",
+    "port": 1001,
+    "expectRenderer": true
+  }
+]
