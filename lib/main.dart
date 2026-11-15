@@ -14,6 +14,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'server.dart';
 import 'theme.dart';
+import 'dlna_service.dart';
+import 'slide_renderer.dart';
+import 'widgets/dlna_picker_sheet.dart';
 import 'tabs/slides_tab.dart';
 import 'tabs/bible_tab.dart';
 import 'tabs/songs_tab.dart';
@@ -109,6 +112,9 @@ class _ControllerPageState extends State<ControllerPage>
   bool _videoMutedByBrowser = false;
   bool _videoFinished = false;
 
+  // ── DLNA "TV Direct" state (Feature 1) ──
+  final DlnaService _dlna = DlnaService.instance;
+
   // ── YouTube state (Feature 3) ──
   bool _ytPlaying = false;
   double _ytPosition = 0;
@@ -186,6 +192,13 @@ class _ControllerPageState extends State<ControllerPage>
       if (ip != null && mounted) setState(() => _deviceIp = ip);
     } catch (_) {}
 
+    // DLNA "TV Direct": boot the UPnP stack (Android-only, no-ops elsewhere)
+    // and point the slide renderer at the folder the server isolate serves.
+    SlideRenderer.uploadDirPath =
+        '${(await getApplicationDocumentsDirectory()).path}/biblepresenter_uploads';
+    SlideRenderer.deviceIp = _deviceIp;
+    await _dlna.start();
+
     _connectWS();
     _reloadUploadedFiles();
 
@@ -249,6 +262,7 @@ class _ControllerPageState extends State<ControllerPage>
       final ip = await NetworkInfo().getWifiIP();
       if (ip != null && mounted) {
         setState(() => _deviceIp = ip);
+        SlideRenderer.deviceIp = ip;
         _showSnack('IP refreshed: $ip');
       } else {
         _showSnack('Could not get WiFi IP', error: true);
@@ -651,6 +665,61 @@ class _ControllerPageState extends State<ControllerPage>
               ]),
               const SizedBox(height: 16),
 
+              // ── TV Direct (DLNA) — the zero-setup path (plan 9.1) ──
+              if (_dlna.isAndroid)
+                GestureDetector(
+                  onTap: () {
+                    // Pre-warm discovery before the sheet opens.
+                    _dlna.scan();
+                    showModalBottomSheet(
+                      context: context,
+                      backgroundColor: kBg3,
+                      shape: const RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.vertical(top: Radius.circular(20))),
+                      isScrollControlled: true,
+                      builder: (_) => DlnaPickerSheet(
+                        onUseBrowserConnect: _copyUrl,
+                        onDeviceSelected: (_) => _castCurrentToDlna(),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                        color: kAccent.withOpacity(0.14),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: kAccent.withOpacity(0.55), width: 1.5)),
+                    child: Row(children: [
+                      Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                              color: kAccent.withOpacity(0.18),
+                              borderRadius: BorderRadius.circular(10)),
+                          child: const Icon(Icons.tv, size: 22, color: kAccent)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            const Text('TV Direct',
+                                style: TextStyle(
+                                    color: kText,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 2),
+                            const Text(
+                                'Cast to any Smart TV — no app, no URL',
+                                style: TextStyle(color: kMuted, fontSize: 10))
+                          ])),
+                      const Icon(Icons.chevron_right, color: kMuted, size: 20),
+                    ]),
+                  ),
+                ),
+              const SizedBox(height: 10),
+
               // ── Chromecast / AirPlay (Pigeon-native) ──
               GestureDetector(
                 onTap: () {
@@ -816,6 +885,30 @@ class _ControllerPageState extends State<ControllerPage>
             ]),
       ),
     );
+  }
+
+  // ══════════════════ DLNA TV DIRECT (Feature 1) ══════════════════
+  /// Renders whatever is currently on the presentation screen as a full-HD
+  /// PNG and pushes it to the connected TV (SetAVTransportURI + Play).
+  Future<void> _castCurrentToDlna() async {
+    if (!_dlna.isConnected) return;
+    if (_tvState.isEmpty || _tvState['type'] == 'idle') {
+      _showSnack('Nothing on screen yet — pick a verse or slide first');
+      return;
+    }
+    try {
+      final url = await SlideRenderer.captureAndPublish(_tvState,
+          context: context);
+      if (url == null) {
+        _showSnack('Could not render the slide', error: true);
+        return;
+      }
+      final ok = await _dlna.castImage(url);
+      _showSnack(ok ? 'Casting to ${_dlna.connectedName}' : 'TV cast failed',
+          error: !ok);
+    } catch (e) {
+      _showSnack('TV Direct error: $e', error: true);
+    }
   }
 
   // ══════════════════ WEBSOCKET ══════════════════
