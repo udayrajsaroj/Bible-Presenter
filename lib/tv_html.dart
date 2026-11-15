@@ -756,6 +756,11 @@ const String tvHtmlContent = r'''
   <!-- ── Video player (Feature 2: local video casting) ── -->
   <video id="video-player" style="display:none;position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain;background:#000;z-index:45;"></video>
 
+  <!-- ── YouTube player (Feature 3: IFrame API) ── -->
+  <div id="yt-container" style="display:none;position:fixed;inset:0;width:100vw;height:100vh;background:#000;z-index:45;">
+    <div id="yt-player"></div>
+  </div>
+
   <div id="page-indicator"></div>
   <div id="doc-loading">
     <div class="loading-spinner"></div>
@@ -870,14 +875,90 @@ const String tvHtmlContent = r'''
     }
   }
 
-  // ── YouTube state (Feature 3, wired up in the IFrame player commit) ──
-  // Stubs keep the media-event switch safe before the player exists.
+  // ── YouTube (Feature 3, IFrame API) ──
+  // The phone drives playback over the WebSocket: yt-play / yt-pause /
+  // yt-seek / yt-volume / yt-unmute, while onStateChange reports yt-state
+  // (playing | paused | ended | muted) so the controller reflects reality.
+  // Videos that disable embedding surface as yt-error (risk R5) and the
+  // TV never navigates away from the presenter page.
+  let ytApiLoading = false;
+  let ytPendingVideoId = '';
+  let ytProgressTimer = null;
+  let ytCurrentState = '';
   let yt = null;
-  function showYouTube(videoId) {}
+
+  function loadYouTubeApi(onReady) {
+    if (window.YT && window.YT.Player) { onReady(); return; }
+    window.onYouTubeIframeAPIReady = () => onReady();
+    if (ytApiLoading) return;
+    ytApiLoading = true;
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+  }
+
+  function ytReport(state, extra) {
+    if (state) ytCurrentState = state;
+    sendToPhone('yt-state', Object.assign({
+      state: ytCurrentState,
+      position: yt ? (yt.getCurrentTime() || 0) : 0,
+      duration: yt ? (yt.getDuration() || 0) : 0
+    }, extra || {}));
+  }
+
+  function showYouTube(videoId) {
+    if (!videoId) return;
+    hideVideo();
+    hideYouTube();
+    document.getElementById('yt-container').style.display = 'block';
+    loadYouTubeApi(() => {
+      ytPendingVideoId = videoId;
+      yt = new YT.Player('yt-player', {
+        videoId: videoId,
+        width: '100%',
+        height: '100%',
+        playerVars: { autoplay: 1, playsinline: 1, controls: 0, rel: 0 },
+        events: {
+          onReady: () => {
+            yt.playVideo();
+            // Some TV browsers block autoplay with sound (risk R6): if the
+            // player refuses to start, begin muted and tell the phone.
+            setTimeout(() => {
+              if (yt && yt.getPlayerState() !== 1) {
+                yt.mute();
+                yt.playVideo();
+                ytReport('muted');
+                sendToPhone('video-muted', {});
+              }
+            }, 1500);
+            if (ytProgressTimer) clearInterval(ytProgressTimer);
+            ytProgressTimer = setInterval(() => {
+              if (yt && yt.getPlayerState() === 1) ytReport('');
+            }, 1000);
+          },
+          onStateChange: (e) => {
+            const map = { 1: 'playing', 2: 'paused', 0: 'ended', 3: 'buffering', 5: 'cued' };
+            ytReport(map[e.data] || '');
+          },
+          onError: (code) => {
+            // 101/150: embedding disabled; 100: not found; 2/5: bad params.
+            sendToPhone('yt-error', { reason: String(code) });
+          }
+        }
+      });
+    });
+  }
+
   function hideYouTube() {
+    if (ytProgressTimer) { clearInterval(ytProgressTimer); ytProgressTimer = null; }
     if (yt) { try { yt.destroy(); } catch (_) {} yt = null; }
+    ytCurrentState = '';
     const c = document.getElementById('yt-container');
-    if (c) c.style.display = 'none';
+    if (c) {
+      c.style.display = 'none';
+      // Recreate the mount node: YT.Player replaces it with an iframe.
+      c.innerHTML = '<div id="yt-player"></div>';
+    }
   }
 
   // ── Mobile detection ──
