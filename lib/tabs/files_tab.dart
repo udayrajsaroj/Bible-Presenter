@@ -1,5 +1,9 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdfx/pdfx.dart' as pdfx;
 import '../theme.dart';
 import '../widgets/shared_widgets.dart';
 
@@ -86,32 +90,18 @@ class FilesTab extends StatelessWidget {
     return '$m:${r.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildFilePreview(String fileType, String localPath, bool isActive) {
-    if (fileType == 'pdf' && localPath.isNotEmpty) {
-      final file = File(localPath);
-      if (file.existsSync()) {
-        return Container(
-          width: 52, height: 68,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: isActive ? kAccent.withOpacity(0.5) : kBorder),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(5),
-            child: Stack(children: [
-              Center(child: Image.asset('assets/icon/app_icon.png', width: 24, height: 24,
-                errorBuilder: (_, __, ___) => const Icon(Icons.picture_as_pdf, size: 24, color: Colors.red))),
-              Positioned(bottom: 0, left: 0, right: 0, child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                color: Colors.red.shade700,
-                child: const Text('PDF', textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-              )),
-            ]),
-          ),
-        );
-      }
+  Widget _buildFilePreview(Map<String, dynamic> f, bool isActive) {
+    final fileType = f['type'] as String? ?? 'other';
+    final localPath = f['localPath'] as String? ?? '';
+    if (fileType == 'pdf') {
+      // Real content preview: rendered page 1, full page visible (contain),
+      // landscape included — width follows the page aspect ratio.
+      return FilePreviewThumb(
+        fileName: f['name'] as String? ?? 'document.pdf',
+        localPath: localPath,
+        size: f['size'] as int? ?? 0,
+        isActive: isActive,
+      );
     }
     if (fileType == 'pptx') {
       return Container(
@@ -551,7 +541,7 @@ class FilesTab extends StatelessWidget {
                 ),
                 child: Column(children: [
                   Row(children: [
-                    _buildFilePreview(fileType, localPath, isActive),
+                    _buildFilePreview(f, isActive),
                     const SizedBox(width: 10),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(fileName, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isActive ? kText : kMuted), overflow: TextOverflow.ellipsis),
@@ -614,6 +604,186 @@ class FilesTab extends StatelessWidget {
             ),
           ),
       ]),
+    );
+  }
+}
+
+// ══════════════════ PDF content preview ══════════════════
+
+/// Real page-1 preview for PDF files. Renders via pdfx once, persists the PNG
+/// under `file_previews/` so it survives restarts (uploaded files keep their
+/// preview even when the app reloads the session and has no local copy), and
+/// displays the FULL page with BoxFit.contain — landscape pages show their
+/// complete content, never cropped. Card width follows the page aspect.
+class FilePreviewThumb extends StatefulWidget {
+  final String fileName;
+  final String localPath;
+  final int size;
+  final bool isActive;
+
+  const FilePreviewThumb({
+    super.key,
+    required this.fileName,
+    required this.localPath,
+    required this.size,
+    required this.isActive,
+  });
+
+  @override
+  State<FilePreviewThumb> createState() => _FilePreviewThumbState();
+}
+
+class _PreviewData {
+  final String path;
+  final double aspect; // page width / height
+  _PreviewData(this.path, this.aspect);
+}
+
+class _FilePreviewThumbState extends State<FilePreviewThumb> {
+  // In-memory cache keyed by name+size: avoids re-rendering on every rebuild.
+  static final Map<String, _PreviewData> _cache = {};
+  _PreviewData? _data;
+  bool _started = false;
+
+  String get _key => '${widget.localPath}|${widget.fileName}|${widget.size}';
+
+  @override
+  void initState() {
+    super.initState();
+    _data = _cache[_key];
+    if (_data == null) _resolve();
+  }
+
+  Future<void> _resolve() async {
+    if (_started) return;
+    _started = true;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final prevDir = Directory('${dir.path}/file_previews');
+      final base = _previewBaseName();
+      final candidate = File('${prevDir.path}/$base.preview.png');
+      _PreviewData? data;
+      if (candidate.existsSync()) {
+        final aspect = await _aspectOf(candidate.readAsBytesSync());
+        if (aspect != null) data = _PreviewData(candidate.path, aspect);
+      }
+      if (data == null &&
+          widget.localPath.isNotEmpty &&
+          File(widget.localPath).existsSync()) {
+        data = await _renderAndStore(widget.localPath, candidate, prevDir);
+      }
+      if (data != null && mounted) {
+        _cache[_key] = data;
+        setState(() => _data = data);
+      }
+    } catch (_) {
+      // Preview is best-effort; the icon fallback below always works.
+    }
+  }
+
+  String _previewBaseName() {
+    final safe = widget.fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    final dot = safe.lastIndexOf('.');
+    final stem = dot > 0 ? safe.substring(0, dot) : safe;
+    return '${stem}_${widget.size}';
+  }
+
+  Future<_PreviewData?> _renderAndStore(
+      String pdfPath, File target, Directory prevDir) async {
+    pdfx.PdfDocument? doc;
+    try {
+      doc = await pdfx.PdfDocument.openFile(pdfPath);
+      if (doc.pagesCount < 1) return null;
+      final page = await doc.getPage(1);
+      const double w = 280;
+      final h = (w * page.height / page.width).round().clamp(40, 2000).toDouble();
+      final img = await page.render(
+        width: w,
+        height: h,
+        format: pdfx.PdfPageImageFormat.png,
+        backgroundColor: '#FFFFFF',
+      );
+      final aspect = page.width / page.height;
+      await doc.close();
+      doc = null;
+      if (img == null) return null;
+      if (!prevDir.existsSync()) prevDir.createSync(recursive: true);
+      await target.writeAsBytes(img.bytes, flush: true);
+      return _PreviewData(target.path, aspect);
+    } catch (_) {
+      return null;
+    } finally {
+      try {
+        await doc?.close();
+      } catch (_) {}
+    }
+  }
+
+  Future<double?> _aspectOf(Uint8List bytes) async {
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final aspect = frame.image.width / frame.image.height;
+      frame.image.dispose();
+      codec.dispose();
+      return aspect;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final border = Border.all(
+        color: widget.isActive ? kAccent.withOpacity(0.5) : kBorder);
+    if (_data != null) {
+      final aspect = _data!.aspect.clamp(0.5, 2.2);
+      final w = (68.0 * aspect).clamp(44.0, 120.0);
+      return Container(
+        width: w,
+        height: 68,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: border,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(5),
+          child: Image.file(
+            File(_data!.path),
+            width: w,
+            height: 68,
+            fit: BoxFit.contain, // full page, landscape included — never cropped
+            errorBuilder: (_, __, ___) => const Center(
+                child: Icon(Icons.picture_as_pdf, size: 24, color: Colors.red)),
+          ),
+        ),
+      );
+    }
+    // Fallback while resolving / when no preview is possible.
+    return Container(
+      width: 52,
+      height: 68,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: border,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(5),
+        child: Stack(children: [
+          Center(
+              child: Image.asset('assets/icon/app_icon.png', width: 24, height: 24,
+                errorBuilder: (_, __, ___) => const Icon(Icons.picture_as_pdf,
+                    size: 24, color: Colors.red))),
+          Positioned(bottom: 0, left: 0, right: 0, child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            color: Colors.red.shade700,
+            child: const Text('PDF', textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+          )),
+        ]),
+      ),
     );
   }
 }

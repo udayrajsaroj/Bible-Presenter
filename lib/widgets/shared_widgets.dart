@@ -1,6 +1,85 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 
+// ══════════════════ AUTO-FIT TEXT ══════════════════
+
+/// Largest font size (in points) at which [text] laid out with [style] fits
+/// inside maxWidth × maxHeight. Binary search between [minSize] and the size
+/// in [style]; guarantees the measured block height stays within maxHeight.
+double fitFontSize({
+  required String text,
+  required TextStyle style,
+  required double maxWidth,
+  required double maxHeight,
+  double minSize = 12,
+  int maxLines = 1000,
+}) {
+  double probe(double size) {
+    final tp = TextPainter(
+      text: TextSpan(text: text, style: style.copyWith(fontSize: size)),
+      textDirection: TextDirection.ltr,
+      maxLines: maxLines,
+    )..layout(maxWidth: maxWidth);
+    final h = tp.height;
+    tp.dispose();
+    return h;
+  }
+
+  var hi = (style.fontSize ?? 16).toDouble();
+  if (probe(hi) <= maxHeight) return hi;
+  var lo = minSize;
+  for (var i = 0; i < 14 && hi - lo > 0.5; i++) {
+    final mid = (lo + hi) / 2;
+    if (probe(mid) <= maxHeight) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
+/// Verse/stanza text that never overflows: starts at [maxFontSize] and
+/// shrinks to the largest size that still fits the available box. Pass
+/// [maxHeightOverride] when the parent gives unbounded height (scroll views).
+class AutoFitText extends StatelessWidget {
+  final String text;
+  final double maxFontSize;
+  final double minFontSize;
+  final TextStyle style;
+  final TextAlign textAlign;
+  final double? maxHeightOverride;
+
+  const AutoFitText(
+    this.text, {
+    super.key,
+    required this.maxFontSize,
+    required this.style,
+    this.minFontSize = 12,
+    this.textAlign = TextAlign.center,
+    this.maxHeightOverride,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, box) {
+      final maxH = maxHeightOverride ?? box.maxHeight;
+      final maxW = box.maxWidth.isFinite ? box.maxWidth : 400.0;
+      final base = style.copyWith(fontSize: maxFontSize);
+      final size = fitFontSize(
+        text: text,
+        style: base,
+        maxWidth: maxW,
+        maxHeight: maxH.isFinite ? maxH : 400.0,
+        minSize: minFontSize,
+      );
+      return Text(text,
+          textAlign: textAlign,
+          style: base.copyWith(fontSize: size));
+    });
+  }
+}
+
 // ══════════════════ REUSABLE WIDGETS ══════════════════
 
 Widget appCard(Widget child) => Container(

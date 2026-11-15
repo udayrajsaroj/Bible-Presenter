@@ -315,8 +315,7 @@ class _ControllerPageState extends State<ControllerPage>
               'url': url,
               'type': type,
               'size': size,
-              'localPath': '',
-              'previewBytes': null
+              'localPath': ''
             });
           }
         }
@@ -1265,14 +1264,6 @@ class _ControllerPageState extends State<ControllerPage>
       }
       setState(() => _isUploading = true);
       final file = File(filePath);
-      Uint8List? previewBytes;
-      if (fileExt == 'pdf') {
-        try {
-          final bytes = await file.readAsBytes();
-          previewBytes =
-              bytes.sublist(0, bytes.length > 50000 ? 50000 : bytes.length);
-        } catch (_) {}
-      }
       final uri = Uri.parse(
           'http://127.0.0.1:3000/api/upload?name=${Uri.encodeComponent(fileName)}');
 
@@ -1290,14 +1281,14 @@ class _ControllerPageState extends State<ControllerPage>
             );
         final response =
             await http.Response.fromStream(await http.Client().send(streamedReq));
-        _handleUploadResponse(response, fileName, filePath, previewBytes, isVideo);
+        _handleUploadResponse(response, fileName, filePath, isVideo);
       } catch (e) {
         // Small files (<50 MB) may retry with a plain buffered POST; large
         // files never fall back to readAsBytes (memory, risk R4).
         if (size > 0 && size <= 50 * 1024 * 1024) {
           final bytes = await file.readAsBytes();
           final response = await http.post(uri, body: bytes);
-          _handleUploadResponse(response, fileName, filePath, previewBytes, isVideo);
+          _handleUploadResponse(response, fileName, filePath, isVideo);
         } else {
           rethrow;
         }
@@ -1311,7 +1302,7 @@ class _ControllerPageState extends State<ControllerPage>
   }
 
   void _handleUploadResponse(http.Response response, String fileName,
-      String filePath, Uint8List? previewBytes, bool isVideo) {
+      String filePath, bool isVideo) {
     setState(() => _isUploading = false);
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -1321,8 +1312,7 @@ class _ControllerPageState extends State<ControllerPage>
           'url': data['url'] ?? '',
           'type': data['type'] ?? (isVideo ? 'video' : 'other'),
           'size': data['size'] ?? 0,
-          'localPath': filePath,
-          'previewBytes': previewBytes
+          'localPath': filePath
         });
       });
       _showSnack('$fileName uploaded!');
@@ -2461,20 +2451,33 @@ class _ControllerPageState extends State<ControllerPage>
           Center(
               child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 32),
-            child: Text(
-              content.isNotEmpty ? content : 'BiblePresenter',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: content.isEmpty ? Colors.white24 : Colors.white,
-                  fontSize: content.isEmpty
-                      ? 20
-                      : (BibleState.of(context).fontSize.toDouble() * 0.9),
-                  fontWeight: FontWeight.w600,
-                  height: 1.8,
-                  shadows: [
-                    Shadow(color: Colors.black.withOpacity(0.9), blurRadius: 20)
-                  ]),
-            ),
+            // Auto-fit: text renders at the configured size when it fits and
+            // scales down uniformly when a long verse would overflow, so the
+            // largest readable size is always used without clipping.
+            child: LayoutBuilder(builder: (ctx, box) {
+              return FittedBox(
+                fit: BoxFit.scaleDown,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: box.maxWidth),
+                  child: Text(
+                    content.isNotEmpty ? content : 'BiblePresenter',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: content.isEmpty ? Colors.white24 : Colors.white,
+                        fontSize: content.isEmpty
+                            ? 20
+                            : (BibleState.of(context).fontSize.toDouble() * 0.9),
+                        fontWeight: FontWeight.w600,
+                        height: 1.8,
+                        shadows: [
+                          Shadow(
+                              color: Colors.black.withOpacity(0.9),
+                              blurRadius: 20)
+                        ]),
+                  ),
+                ),
+              );
+            }),
           )),
           if (!_showFullScreenControls)
             Positioned(

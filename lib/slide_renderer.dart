@@ -169,7 +169,18 @@ class SlideRenderer {
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 58, vertical: 32),
-                child: Center(child: _contentFor(type, content)),
+                // Guaranteed fit: content lays out at its natural size inside
+                // the content width and scales down uniformly when it would
+                // overflow the slide — the largest readable size wins.
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: SizedBox(
+                      width: slideSize.width - 116,
+                      child: _contentFor(type, content),
+                    ),
+                  ),
+                ),
               ),
             ),
           ],

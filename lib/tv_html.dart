@@ -1059,6 +1059,38 @@ const String tvHtmlContent = r'''
     return Math.max(14, Math.round((base || 44) * scale * mobileFactor));
   }
 
+  // ── Auto-fit: shrink rendered text until the stage stops overflowing ──
+  // The count-based fontSize() estimate can still overflow for long verses;
+  // this measures the real layout and steps the font down so the largest
+  // readable size always fits the screen. Covers verse, song, slide and
+  // welcome text alike.
+  function fitStageText() {
+    const stageEl = document.getElementById('stage');
+    if (!stageEl) return;
+    const targets = () => stageEl.querySelectorAll('.verse-hi, .verse-en, .slide-text, .slide-title, .welcome-message');
+    if (!targets().length) return;
+    let guard = 0;
+    let shrank = false;
+    while (stageEl.scrollHeight > stageEl.clientHeight && guard < 16) {
+      let touched = false;
+      targets().forEach(el => {
+        const cur = parseFloat(getComputedStyle(el).fontSize);
+        const next = Math.max(14, Math.round(cur * 0.9));
+        if (next < cur) {
+          el.style.transition = 'none';
+          el.style.fontSize = next + 'px';
+          touched = true;
+        }
+      });
+      if (!touched) break;
+      shrank = true;
+      guard++;
+    }
+    if (shrank) {
+      requestAnimationFrame(() => targets().forEach(el => { el.style.transition = ''; }));
+    }
+  }
+
   // ── PDF rendering ──
   async function loadPdf(url) {
     const docViewer = document.getElementById('doc-viewer');
@@ -1373,6 +1405,11 @@ const String tvHtmlContent = r'''
         loadPptx(newUrl);
       }
     }
+
+    // Auto-fit pass now, and once more after webfonts settle (Hindi serif
+    // loads async and can re-wrap text taller than the first measure).
+    fitStageText();
+    setTimeout(fitStageText, 450);
 
     prevStateType = state.type;
     updateMobileNav();

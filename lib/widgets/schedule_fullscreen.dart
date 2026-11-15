@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme.dart';
+import 'shared_widgets.dart';
 
 /// Schedule presentation full-screen with ALWAYS-VISIBLE controllers.
 /// BUG FIX: Removed the Positioned.fill GestureDetector that was catching all taps
@@ -116,9 +117,14 @@ class _ScheduleFullscreenState extends State<ScheduleFullscreen> {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: Colors.white.withOpacity(0.08)),
                     ),
-                    child: Text(
+                    child: AutoFitText(
                       currentStanza.isEmpty ? 'No content' : currentStanza,
-                      textAlign: TextAlign.center,
+                      maxFontSize: (widget.fontSize * 0.55).clamp(14, 22).toDouble(),
+                      minFontSize: 12,
+                      // Scroll view gives unbounded height — cap the fit box
+                      // so long stanzas shrink instead of pushing a scroll.
+                      maxHeightOverride:
+                          MediaQuery.of(context).size.height - 300,
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.9),
                         fontSize: (widget.fontSize * 0.55).clamp(14, 22).toDouble(),
