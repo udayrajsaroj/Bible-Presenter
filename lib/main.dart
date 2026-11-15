@@ -102,6 +102,20 @@ class _ControllerPageState extends State<ControllerPage>
   int _activeFileIndex = -1;
   String _currentlyCastUrl = '';
 
+  // ── Video remote state (Feature 2) ──
+  double _videoPosition = 0;
+  double _videoDuration = 0;
+  bool _videoPlaying = false;
+  bool _videoMutedByBrowser = false;
+  bool _videoFinished = false;
+
+  // ── YouTube state (Feature 3) ──
+  bool _ytPlaying = false;
+  double _ytPosition = 0;
+  double _ytDuration = 0;
+  List<String> _ytQueue = [];
+  int _ytQueueIndex = -1;
+
   // ── Bible state ──
 
   // ── Uploaded backgrounds ──
@@ -811,6 +825,14 @@ class _ControllerPageState extends State<ControllerPage>
         (msg) {
           try {
             final data = jsonDecode(msg as String);
+            // TV → phone media reports arrive as {event, data}.
+            if (data is Map && data['event'] != null) {
+              _handleTvEvent(
+                data['event'] as String,
+                Map<String, dynamic>.from(data['data'] as Map? ?? {}),
+              );
+              return;
+            }
             if (data is Map && data['type'] != null) {
               if (mounted) {
                 setState(() {
@@ -953,11 +975,13 @@ class _ControllerPageState extends State<ControllerPage>
   }
 
   // ══════════════════ FILE UPLOAD & CAST ══════════════════
+  static const _videoExts = ['mp4', 'm4v', 'webm', 'mov', 'mkv', 'avi'];
+
   Future<void> _pickAndUploadFile() async {
     try {
       final result = await FilePicker.platform.pickFiles(
           type: FileType.custom,
-          allowedExtensions: ['pdf', 'ppt', 'pptx'],
+          allowedExtensions: ['pdf', 'ppt', 'pptx', ..._videoExts],
           allowMultiple: false);
       if (result == null || result.files.isEmpty) return;
       final filePath = result.files.first.path;
@@ -967,46 +991,77 @@ class _ControllerPageState extends State<ControllerPage>
       }
       final fileName = result.files.first.name;
       final fileExt = fileName.split('.').last.toLowerCase();
-      if (!['pdf', 'ppt', 'pptx'].contains(fileExt)) {
-        _showSnack('Only PDF and PPT/PPTX files are allowed!', error: true);
+      final isVideo = _videoExts.contains(fileExt);
+      if (!['pdf', 'ppt', 'pptx', ..._videoExts].contains(fileExt)) {
+        _showSnack('Only PDF, PPT/PPTX and video files are allowed!', error: true);
         return;
       }
       setState(() => _isUploading = true);
       final file = File(filePath);
-      final bytes = await file.readAsBytes();
       Uint8List? previewBytes;
       if (fileExt == 'pdf') {
         try {
+          final bytes = await file.readAsBytes();
           previewBytes =
               bytes.sublist(0, bytes.length > 50000 ? 50000 : bytes.length);
         } catch (_) {}
       }
       final uri = Uri.parse(
           'http://127.0.0.1:3000/api/upload?name=${Uri.encodeComponent(fileName)}');
-      final response = await http.post(uri, body: bytes);
-      setState(() => _isUploading = false);
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        setState(() {
-          _uploadedFiles.insert(0, {
-            'name': data['name'] ?? fileName,
-            'url': data['url'] ?? '',
-            'type': data['type'] ?? 'other',
-            'size': data['size'] ?? bytes.length,
-            'localPath': filePath,
-            'previewBytes': previewBytes
-          });
-        });
-        _showSnack('$fileName uploaded!');
-        _castFile(0);
-      } else {
-        _showSnack('Upload fail: ${response.statusCode}', error: true);
+
+      // Stream the file from disk to the server (videos reach 1–2 GB; risk
+      // R4 keeps phone memory flat on both ends of the upload).
+      int size = 0;
+      try {
+        size = await file.length();
+        final streamedReq = http.StreamedRequest('POST', uri)
+          ..contentLength = size;
+        file.openRead().listen(
+              streamedReq.sink.add,
+              onDone: () => streamedReq.sink.close(),
+              onError: (_) => streamedReq.sink.close(),
+            );
+        final response =
+            await http.Response.fromStream(await http.Client().send(streamedReq));
+        _handleUploadResponse(response, fileName, filePath, previewBytes, isVideo);
+      } catch (e) {
+        // Small files (<50 MB) may retry with a plain buffered POST; large
+        // files never fall back to readAsBytes (memory, risk R4).
+        if (size > 0 && size <= 50 * 1024 * 1024) {
+          final bytes = await file.readAsBytes();
+          final response = await http.post(uri, body: bytes);
+          _handleUploadResponse(response, fileName, filePath, previewBytes, isVideo);
+        } else {
+          rethrow;
+        }
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isUploading = false);
         _showSnack('Upload error: $e', error: true);
       }
+    }
+  }
+
+  void _handleUploadResponse(http.Response response, String fileName,
+      String filePath, Uint8List? previewBytes, bool isVideo) {
+    setState(() => _isUploading = false);
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      setState(() {
+        _uploadedFiles.insert(0, {
+          'name': data['name'] ?? fileName,
+          'url': data['url'] ?? '',
+          'type': data['type'] ?? (isVideo ? 'video' : 'other'),
+          'size': data['size'] ?? 0,
+          'localPath': filePath,
+          'previewBytes': previewBytes
+        });
+      });
+      _showSnack('$fileName uploaded!');
+      _castFile(0);
+    } else {
+      _showSnack('Upload fail: ${response.statusCode}', error: true);
     }
   }
 
@@ -1037,9 +1092,144 @@ class _ControllerPageState extends State<ControllerPage>
       _currentlyCastUrl = fileUrl;
       _emit('cast-pptx', {'url': fileUrl, 'name': fileName});
       _showSnack('Casting PPT to TV!');
+    } else if (fileType == 'video') {
+      _castVideo(idx);
     } else {
       _showSnack('This file type is not supported!', error: true);
     }
+  }
+
+  // ══════════════════ VIDEO CAST & REMOTE (Feature 2) ══════════════════
+  void _castVideo(int idx) {
+    final f = _uploadedFiles[idx];
+    final fileUrl = f['url'] as String? ?? '';
+    final fileName = f['name'] as String? ?? 'Video';
+    if (fileUrl.isEmpty) {
+      _showSnack('File URL not found!', error: true);
+      return;
+    }
+    final ext = fileName.split('.').last.toLowerCase();
+    if (['mkv', 'avi'].contains(ext)) {
+      _showSnack(
+          'MKV/AVI often fails on TV players — MP4 (H.264) is recommended',
+          error: true);
+    }
+    setState(() {
+      _activeFileIndex = idx;
+      _currentlyCastUrl = fileUrl;
+      _videoPosition = 0;
+      _videoDuration = 0;
+      _videoPlaying = true;
+      _videoMutedByBrowser = false;
+      _videoFinished = false;
+    });
+    _emit('cast-video', {'url': fileUrl, 'title': fileName});
+    _showSnack('Casting video to TV!');
+  }
+
+  void _videoPlayPause() {
+    if (_videoPlaying) {
+      _emit('video-control', {'action': 'pause'});
+      setState(() => _videoPlaying = false);
+    } else {
+      _emit('video-control', {'action': 'play'});
+      setState(() {
+        _videoPlaying = true;
+        _videoFinished = false;
+      });
+    }
+  }
+
+  void _videoSeekTo(double seconds) {
+    _emit('video-seek', {'seconds': seconds.round()});
+    setState(() => _videoPosition = seconds);
+  }
+
+  void _videoStop() {
+    _emit('video-stop', {});
+    setState(() {
+      _currentlyCastUrl = '';
+      _videoPosition = 0;
+      _videoDuration = 0;
+      _videoPlaying = false;
+      _videoMutedByBrowser = false;
+      _videoFinished = false;
+    });
+  }
+
+  void _videoUnmute() {
+    _emit('yt-unmute', {});
+    _emit('video-control', {'action': 'play'});
+    setState(() => _videoMutedByBrowser = false);
+    _showSnack('Audio on');
+  }
+
+  // Handles TV → phone reports forwarded by the server ({event, data}).
+  void _handleTvEvent(String event, Map<String, dynamic> data) {
+    switch (event) {
+      case 'video-progress':
+        if (mounted) {
+          setState(() {
+            _videoPosition = (data['position'] as num? ?? 0).toDouble();
+            if ((data['duration'] as num? ?? 0) > 0) {
+              _videoDuration = (data['duration'] as num).toDouble();
+            }
+            _videoPlaying = data['playing'] as bool? ?? _videoPlaying;
+            _videoFinished = false;
+          });
+        }
+        break;
+      case 'video-ended':
+        if (mounted) {
+          setState(() {
+            _videoPlaying = false;
+            _videoFinished = true;
+            _videoPosition = _videoDuration;
+          });
+          _showSnack('Video finished');
+        }
+        break;
+      case 'video-muted':
+        if (mounted) setState(() => _videoMutedByBrowser = true);
+        break;
+      case 'video-error':
+        if (mounted) {
+          setState(() => _videoPlaying = false);
+          _showSnack(
+              'TV could not play this file — MP4 (H.264/AAC) works best',
+              error: true);
+        }
+        break;
+      case 'yt-state':
+        if (mounted) {
+          final st = data['state'] as String?;
+          setState(() {
+            _ytPlaying = st == 'playing';
+            if (st == 'ended') _ytAdvanceQueue();
+            if ((data['position'] as num? ?? 0) > 0) {
+              _ytPosition = (data['position'] as num).toDouble();
+            }
+          });
+        }
+        break;
+      case 'yt-error':
+        if (mounted) {
+          setState(() => _ytPlaying = false);
+          _showSnack("This video can't be cast (owner restriction)", error: true);
+        }
+        break;
+    }
+  }
+
+  /// Playlist advance: on the YouTube player's `ended` state, move to the
+  /// next queued video, if any.
+  void _ytAdvanceQueue() {
+    if (_ytQueueIndex < 0 || _ytQueueIndex >= _ytQueue.length - 1) return;
+    _ytQueueIndex++;
+    final videoId = _ytQueue[_ytQueueIndex];
+    setState(() => _ytPlaying = true);
+    _emit('cast-youtube', {'videoId': videoId, 'title': ''});
+    _showSnack('Playing next video (${_ytQueueIndex + 1}/${_ytQueue.length})');
   }
 
   void _pdfPrevPage() {
@@ -2233,7 +2423,16 @@ class _ControllerPageState extends State<ControllerPage>
                   onDeleteFile: _deleteUploadedFile,
                   onPdfPrevPage: _pdfPrevPage,
                   onPdfNextPage: _pdfNextPage,
-                  onOpenFullscreen: _openFilesFullscreen),
+                  onOpenFullscreen: _openFilesFullscreen,
+                  videoPosition: _videoPosition,
+                  videoDuration: _videoDuration,
+                  videoPlaying: _videoPlaying,
+                  videoMuted: _videoMutedByBrowser,
+                  videoFinished: _videoFinished,
+                  onVideoPlayPause: _videoPlayPause,
+                  onVideoSeek: _videoSeekTo,
+                  onVideoStop: _videoStop,
+                  onVideoUnmute: _videoUnmute),
               Consumer<BibleState>(
                 builder: (context, bible, _) => SettingsTab(
                     fontSize: bible.fontSize,

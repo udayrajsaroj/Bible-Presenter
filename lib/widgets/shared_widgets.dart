@@ -166,6 +166,7 @@ Color fileColor(String type) {
   switch (type) {
     case 'pdf': return Colors.red.shade400;
     case 'pptx': return Colors.orange.shade400;
+    case 'video': return kAccent;
     default: return kMuted;
   }
 }
@@ -173,5 +174,6 @@ Color fileColor(String type) {
 String formatFileSize(int bytes) {
   if (bytes < 1024) return '$bytes B';
   if (bytes < 1048576) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-  return '${(bytes / 1048576).toStringAsFixed(1)} MB';
+  if (bytes < 1073741824) return '${(bytes / 1048576).toStringAsFixed(1)} MB';
+  return '${(bytes / 1073741824).toStringAsFixed(2)} GB';
 }

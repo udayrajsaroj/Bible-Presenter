@@ -16,6 +16,16 @@ class FilesTab extends StatelessWidget {
   final VoidCallback onPdfPrevPage;
   final VoidCallback onPdfNextPage;
   final VoidCallback onOpenFullscreen;
+  // ── Video remote (Feature 2) ──
+  final double videoPosition;
+  final double videoDuration;
+  final bool videoPlaying;
+  final bool videoMuted;
+  final bool videoFinished;
+  final VoidCallback onVideoPlayPause;
+  final void Function(double seconds) onVideoSeek;
+  final VoidCallback onVideoStop;
+  final VoidCallback onVideoUnmute;
 
   const FilesTab({
     super.key,
@@ -31,7 +41,25 @@ class FilesTab extends StatelessWidget {
     required this.onPdfPrevPage,
     required this.onPdfNextPage,
     required this.onOpenFullscreen,
+    required this.videoPosition,
+    required this.videoDuration,
+    required this.videoPlaying,
+    required this.videoMuted,
+    required this.videoFinished,
+    required this.onVideoPlayPause,
+    required this.onVideoSeek,
+    required this.onVideoStop,
+    required this.onVideoUnmute,
   });
+
+  static const _videoExts = ['mp4', 'm4v', 'webm', 'mov', 'mkv', 'avi'];
+
+  String _formatTime(double seconds) {
+    final s = seconds.floor();
+    final m = s ~/ 60;
+    final r = s % 60;
+    return '$m:${r.toString().padLeft(2, '0')}';
+  }
 
   Widget _buildFilePreview(String fileType, String localPath, bool isActive) {
     if (fileType == 'pdf' && localPath.isNotEmpty) {
@@ -75,6 +103,21 @@ class FilesTab extends StatelessWidget {
         ]),
       );
     }
+    if (fileType == 'video') {
+      return Container(
+        width: 52, height: 68,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF12304f), Color(0xFF0d1a2e)]),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: isActive ? kAccent.withOpacity(0.5) : kBorder),
+        ),
+        child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(Icons.smart_display_outlined, size: 22, color: kAccent),
+          SizedBox(height: 2),
+          Text('VIDEO', style: TextStyle(color: kAccent, fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        ]),
+      );
+    }
     return Container(
       width: 52, height: 68,
       decoration: BoxDecoration(
@@ -87,12 +130,13 @@ class FilesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isVideoActive = tvState['type'] == 'video';
     return SingleChildScrollView(
       padding: const EdgeInsets.all(14),
       child: Column(children: [
         // Upload button
         appCard(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          label('UPLOAD PDF / PPT'),
+          label('UPLOAD FILES'),
           const SizedBox(height: 10),
           GestureDetector(
             onTap: isUploading ? null : onPickAndUploadFile,
@@ -113,9 +157,9 @@ class FilesTab extends StatelessWidget {
                   : const Column(children: [
                       Icon(Icons.cloud_upload_outlined, size: 32, color: kAccent),
                       SizedBox(height: 8),
-                      Text('Tap to Upload PDF / PPT', style: TextStyle(color: kText, fontSize: 13, fontWeight: FontWeight.w600)),
+                      Text('Tap to Upload PDF / PPT / Video', style: TextStyle(color: kText, fontSize: 13, fontWeight: FontWeight.w600)),
                       SizedBox(height: 4),
-                      Text('PDF, PPT, PPTX files supported', style: TextStyle(color: kMuted, fontSize: 10)),
+                      Text('PDF, PPT, PPTX · MP4 (H.264 recommended) · WebM, MOV', style: TextStyle(color: kMuted, fontSize: 10)),
                     ]),
             ),
           ),
@@ -146,11 +190,112 @@ class FilesTab extends StatelessWidget {
 
         const SizedBox(height: 12),
 
+        // ── Video remote (Feature 2) ──
+        if (isVideoActive) appCard(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            label('VIDEO REMOTE'),
+            if (videoMuted)
+              GestureDetector(
+                onTap: onVideoUnmute,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade900.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(100),
+                    border: Border.all(color: Colors.orange.shade700)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.volume_off, size: 12, color: Colors.orange.shade400),
+                    const SizedBox(width: 5),
+                    Text('Unmute', style: TextStyle(color: Colors.orange.shade400, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ]),
+                ),
+              ),
+          ]),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: kBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: kAccent.withOpacity(0.3))),
+            child: Column(children: [
+              if (videoFinished)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.check_circle, size: 14, color: Colors.green),
+                    SizedBox(width: 6),
+                    Text('Finished', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              Slider(
+                value: videoDuration > 0
+                    ? videoPosition.clamp(0.0, videoDuration)
+                    : 0,
+                max: videoDuration > 0 ? videoDuration : 1,
+                onChanged: videoDuration > 0
+                    ? (v) => onVideoSeek(v)
+                    : null,
+                activeColor: kAccent,
+                inactiveColor: kBorder,
+              ),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Text(_formatTime(videoPosition),
+                    style: const TextStyle(color: kMuted, fontFamily: 'monospace', fontSize: 10)),
+                Text(_formatTime(videoDuration),
+                    style: const TextStyle(color: kMuted, fontFamily: 'monospace', fontSize: 10)),
+              ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                // Play / pause toggle
+                Expanded(
+                  child: GestureDetector(
+                    onTap: onVideoPlayPause,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: kAccent.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: kAccent.withOpacity(0.4))),
+                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(videoPlaying ? Icons.pause : Icons.play_arrow,
+                            size: 16, color: kAccent),
+                        const SizedBox(width: 6),
+                        Text(videoPlaying ? 'Pause' : 'Play',
+                            style: const TextStyle(color: kAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                      ]),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Stop
+                Expanded(
+                  child: GestureDetector(
+                    onTap: onVideoStop,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade900.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.shade800.withOpacity(0.4))),
+                      child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(Icons.stop, size: 16, color: Colors.red),
+                        SizedBox(width: 6),
+                        Text('Stop', style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
+                      ]),
+                    ),
+                  ),
+                ),
+              ]),
+            ]),
+          ),
+        ])),
+
+        const SizedBox(height: 12),
+
         // Uploaded files list
         appCard(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             label('UPLOADED FILES'),
-            if (uploadedFiles.isNotEmpty) Text('$uploadedFiles.length', style: const TextStyle(color: kAccent, fontFamily: 'monospace', fontSize: 10)),
+            if (uploadedFiles.isNotEmpty) Text('${uploadedFiles.length} files', style: const TextStyle(color: kAccent, fontFamily: 'monospace', fontSize: 10)),
           ]),
           const SizedBox(height: 10),
 
@@ -162,7 +307,7 @@ class FilesTab extends StatelessWidget {
                 Icon(Icons.folder_open, size: 28, color: Color(0xFF1a2d45)),
                 SizedBox(height: 8),
                 Text('No files uploaded yet', style: TextStyle(color: kMuted, fontSize: 11)),
-                Text('Upload PDF or PPT to display on TV', style: TextStyle(color: Color(0xFF1a2d45), fontSize: 9)),
+                Text('Upload PDF, PPT or a video to display on TV', style: TextStyle(color: Color(0xFF1a2d45), fontSize: 9)),
               ]),
             )
           else
@@ -175,6 +320,14 @@ class FilesTab extends StatelessWidget {
               final fileSize = f['size'] as int? ?? 0;
               final localPath = f['localPath'] as String? ?? '';
               final isPdf = fileType == 'pdf';
+              final isVideo = fileType == 'video';
+              final ext = fileName.split('.').last.toUpperCase();
+
+              String castLabel() {
+                if (isPdf) return 'Cast PDF to TV';
+                if (isVideo) return 'Cast Video to TV';
+                return 'Cast PPT to TV';
+              }
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
@@ -195,7 +348,7 @@ class FilesTab extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(color: fileColor(fileType).withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
-                          child: Text(isPdf ? 'PDF' : 'PPT', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: fileColor(fileType), letterSpacing: 0.5)),
+                          child: Text(isPdf ? 'PDF' : (isVideo ? ext : 'PPT'), style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: fileColor(fileType), letterSpacing: 0.5)),
                         ),
                         const SizedBox(width: 8),
                         Text(formatFileSize(fileSize), style: const TextStyle(fontSize: 9, color: kMuted, fontFamily: 'monospace')),
@@ -218,7 +371,7 @@ class FilesTab extends StatelessWidget {
                   ]),
                   if (!isActive) Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: SizedBox(width: double.infinity, child: castFileBtn(isPdf ? 'Cast PDF to TV' : 'Cast PPT to TV', () => onCastFile(idx))),
+                    child: SizedBox(width: double.infinity, child: castFileBtn(castLabel(), () => onCastFile(idx))),
                   ),
                 ]),
               );
