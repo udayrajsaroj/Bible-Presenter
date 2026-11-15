@@ -114,6 +114,9 @@ class _ControllerPageState extends State<ControllerPage>
 
   // ── DLNA "TV Direct" state (Feature 1) ──
   final DlnaService _dlna = DlnaService.instance;
+  // One-tap reconnect banner: the stored TV from the last session.
+  String _reconnectName = '';
+  String _reconnectUdn = '';
 
   // ── YouTube state (Feature 3) ──
   bool _ytPlaying = false;
@@ -161,7 +164,16 @@ class _ControllerPageState extends State<ControllerPage>
       ..addListener(() => setState(() {}));
     // Register the Pigeon Flutter API handler so native → Flutter callbacks work
     CastFlutterApi.setUp(_castService);
+    _dlna.addListener(_onDlnaChanged);
     _boot();
+  }
+
+  void _onDlnaChanged() {
+    if (mounted) setState(() {});
+    // Renderer went offline (TV powered off, Wi-Fi drop) — tell the user.
+    if (_dlna.rendererOffline) {
+      _showSnack('TV disconnected — check Wi-Fi or Reconnect', error: true);
+    }
   }
 
   // ══════════════════ BOOT SEQUENCE ══════════════════
@@ -198,6 +210,7 @@ class _ControllerPageState extends State<ControllerPage>
         '${(await getApplicationDocumentsDirectory()).path}/biblepresenter_uploads';
     SlideRenderer.deviceIp = _deviceIp;
     await _dlna.start();
+    await _checkReconnectBanner();
 
     _connectWS();
     _reloadUploadedFiles();
@@ -885,6 +898,35 @@ class _ControllerPageState extends State<ControllerPage>
             ]),
       ),
     );
+  }
+
+  /// Warm-up ping of the last-used TV (plan 9.2): if it answers, the whole
+  /// reconnect ritual is a single tap on the banner. TVs in deep standby
+  /// never answer SSDP (risk R9), so a failed ping simply hides the banner.
+  Future<void> _checkReconnectBanner() async {
+    final last = await DlnaService.lastTv();
+    if (last == null || !mounted) return;
+    setState(() {
+      _reconnectName = last.name;
+      _reconnectUdn = last.udn;
+    });
+    final alive = await _dlna.pingStored(last.udn);
+    if (alive != null && mounted) {
+      // TV answered: banner stays; tapping connects and casts.
+      setState(() {});
+    }
+  }
+
+  Future<void> _reconnectFromBanner() async {
+    if (_reconnectUdn.isEmpty) return;
+    final alive = await _dlna.pingStored(_reconnectUdn);
+    if (alive == null) {
+      _showSnack('$_reconnectName not reachable — check the TV is on');
+      return;
+    }
+    await _dlna.connect(alive);
+    _showSnack('Connected ✓  ${_dlna.connectedName}');
+    await _castCurrentToDlna();
   }
 
   // ══════════════════ DLNA TV DIRECT (Feature 1) ══════════════════
@@ -2242,6 +2284,7 @@ class _ControllerPageState extends State<ControllerPage>
     for (final c in _songStanzaCtrls) {
       c.dispose();
     }
+    _dlna.removeListener(_onDlnaChanged);
     // Mark cast service as disposed FIRST so any pending native callbacks
     // (e.g. onDisconnected arriving on app close) become no-ops. Then
     // tear down the native side without awaiting — we're shutting down.
@@ -2668,9 +2711,98 @@ class _ControllerPageState extends State<ControllerPage>
             ],
           ),
         ),
+        _dlnaBanner(),
         _bottomUrlBar(),
       ]),
     );
+  }
+
+  /// Persistent connection surface above the URL bar (plan 9.1/9.3):
+  /// connected chip, disconnect banner with one-tap reconnect, or the
+  /// last-TV reconnect offer.
+  Widget _dlnaBanner() {
+    if (_dlna.isConnected) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        color: Colors.green.shade900.withOpacity(0.15),
+        child: Row(children: [
+          Icon(Icons.circle, size: 7, color: Colors.green.shade400),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text('TV Direct · ${_dlna.connectedName}',
+                style: TextStyle(
+                    color: Colors.green.shade300,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis),
+          ),
+          GestureDetector(
+            onTap: () async {
+              await _dlna.disconnect();
+              if (mounted) _showSnack('TV Direct disconnected');
+            },
+            child: Icon(Icons.close,
+                size: 15, color: Colors.green.shade300),
+          ),
+        ]),
+      );
+    }
+    if (_dlna.rendererOffline) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        color: Colors.red.shade900.withOpacity(0.2),
+        child: Row(children: [
+          Icon(Icons.wifi_off, size: 13, color: Colors.red.shade300),
+          const SizedBox(width: 7),
+          const Expanded(
+            child: Text('TV disconnected — check Wi-Fi or Reconnect',
+                style: TextStyle(color: Colors.red, fontSize: 11)),
+          ),
+          GestureDetector(
+            onTap: _reconnectFromBanner,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                  color: Colors.red.shade800.withOpacity(0.25),
+                  borderRadius: BorderRadius.circular(100)),
+              child: const Text('Reconnect',
+                  style: TextStyle(
+                      color: Colors.red,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ]),
+      );
+    }
+    if (_reconnectUdn.isNotEmpty && !_dlna.isConnected) {
+      return GestureDetector(
+        onTap: _reconnectFromBanner,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          color: Colors.green.shade900.withOpacity(0.12),
+          child: Row(children: [
+            Icon(Icons.history, size: 13, color: Colors.green.shade400),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text('Cast to $_reconnectName — tap to connect',
+                  style: TextStyle(
+                      color: Colors.green.shade300,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis),
+            ),
+            const Icon(Icons.chevron_right,
+                size: 15, color: Colors.green),
+          ]),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
   }
 
   PreferredSizeWidget _buildAppBar() => AppBar(
