@@ -752,6 +752,10 @@ const String tvHtmlContent = r'''
     <canvas id="pdf-canvas"></canvas>
     <iframe id="pptx-iframe" src="" style="display:none"></iframe>
   </div>
+
+  <!-- ── Video player (Feature 2: local video casting) ── -->
+  <video id="video-player" style="display:none;position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain;background:#000;z-index:45;"></video>
+
   <div id="page-indicator"></div>
   <div id="doc-loading">
     <div class="loading-spinner"></div>
@@ -777,6 +781,104 @@ const String tvHtmlContent = r'''
   let pdfTotalPages = 0;
   let pdfRendering = false;
   let currentPdfUrl = '';
+
+  // ── Video state (Feature 2) ──
+  const videoEl = document.getElementById('video-player');
+  let videoUrl = '';
+  let lastProgressSecond = -1;
+
+  function sendToPhone(event, data) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ event: event, data: data || {} }));
+    }
+  }
+
+  function showVideo(url, autoPlay) {
+    closeDocViewer();
+    hideYouTube();
+    const fullUrl = url.startsWith('http') ? url : (location.protocol + '//' + location.host + url);
+    if (videoUrl !== fullUrl) {
+      videoUrl = fullUrl;
+      videoEl.src = videoUrl + (videoUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+    }
+    videoEl.style.display = 'block';
+    if (autoPlay !== false) {
+      videoEl.play().catch(() => {
+        // Some TV browsers block autoplay with sound (risk R6): start muted
+        // so playback still begins, and tell the phone to offer Unmute.
+        videoEl.muted = true;
+        videoEl.play().catch(() => {});
+        sendToPhone('video-muted', {});
+      });
+    }
+  }
+
+  function hideVideo() {
+    videoEl.pause();
+    videoEl.removeAttribute('src');
+    videoEl.load(); // reset media pipeline so the next cast starts clean
+    videoEl.style.display = 'none';
+    videoUrl = '';
+    lastProgressSecond = -1;
+  }
+
+  // Periodic position report → phone seek slider (video-progress).
+  videoEl.addEventListener('timeupdate', () => {
+    const sec = Math.floor(videoEl.currentTime);
+    if (sec === lastProgressSecond) return;
+    lastProgressSecond = sec;
+    sendToPhone('video-progress', {
+      position: videoEl.currentTime || 0,
+      duration: videoEl.duration || 0,
+      playing: !videoEl.paused && !videoEl.ended
+    });
+  });
+  videoEl.addEventListener('ended', () => sendToPhone('video-ended', {}));
+  videoEl.addEventListener('error', () => {
+    if (videoEl.style.display !== 'none' && videoUrl) {
+      // MKV/AVI containers frequently fail on TV browsers (risk R10):
+      // surface a friendly error instead of a black screen.
+      sendToPhone('video-error', { code: videoEl.error ? videoEl.error.code : 0 });
+    }
+  });
+
+  // ── Media events (phone → TV, pass-through of {event, data}) ──
+  function handleMediaEvent(event, data) {
+    data = data || {};
+    switch (event) {
+      case 'cast-video':
+        showVideo(data.url || '');
+        break;
+      case 'video-control':
+        if (data.action === 'pause') videoEl.pause();
+        if (data.action === 'play') videoEl.play().catch(() => {});
+        break;
+      case 'video-seek':
+        if (!isNaN(data.seconds)) videoEl.currentTime = data.seconds;
+        break;
+      case 'video-stop':
+        hideVideo();
+        break;
+      case 'cast-youtube':
+        if (typeof showYouTube === 'function') showYouTube(data.videoId || '');
+        break;
+      case 'yt-play':   if (yt) { yt.playVideo(); }  break;
+      case 'yt-pause':  if (yt) { yt.pauseVideo(); } break;
+      case 'yt-seek':   if (yt && !isNaN(data.seconds)) yt.seekTo(data.seconds, true); break;
+      case 'yt-volume': if (yt) { yt.unMute(); yt.setVolume(data.value != null ? data.value : 100); } break;
+      case 'yt-unmute': if (yt) { yt.unMute(); yt.setVolume(100); yt.playVideo(); } break;
+    }
+  }
+
+  // ── YouTube state (Feature 3, wired up in the IFrame player commit) ──
+  // Stubs keep the media-event switch safe before the player exists.
+  let yt = null;
+  function showYouTube(videoId) {}
+  function hideYouTube() {
+    if (yt) { try { yt.destroy(); } catch (_) {} yt = null; }
+    const c = document.getElementById('yt-container');
+    if (c) c.style.display = 'none';
+  }
 
   // ── Mobile detection ──
   function isMobile() {
@@ -848,6 +950,9 @@ const String tvHtmlContent = r'''
     ws.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
+        // Media events (video / YouTube) arrive as raw {event, data}
+        // pass-throughs; state broadcasts carry a `type` field.
+        if (data && data.event) { handleMediaEvent(data.event, data.data); return; }
         if (data && data.type) { state = data; render(); }
       } catch(_) {}
     };
@@ -993,6 +1098,12 @@ const String tvHtmlContent = r'''
     const bgLayer = document.getElementById('bg-layer');
     const mobile = isMobile();
 
+    // One content at a time: any non-video state stops playback.
+    if (state.type !== 'video' && state.type !== 'youtube') {
+      hideVideo();
+      hideYouTube();
+    }
+
     // Handle background: animated or image
     const bgUrl = state.background?.url || '';
     if (bgUrl.startsWith('animated:')) {
@@ -1013,14 +1124,35 @@ const String tvHtmlContent = r'''
 
     if (state.type === 'idle') {
       closeDocViewer();
+      hideVideo();
+      hideYouTube();
       stage.innerHTML = `
         <div id="idle-screen" class="fade-in">
           <div class="idle-cross"></div>
           <p class="idle-label">BiblePresenter</p>
         </div>`;
 
+    } else if (state.type === 'video') {
+      closeDocViewer();
+      hideYouTube();
+      // Reconnecting TVs restore playback from the reported position.
+      const c = state.content || {};
+      showVideo(c.url || '', c.playing !== false);
+      if (!isNaN(c.position) && Math.abs(videoEl.currentTime - c.position) > 2) {
+        videoEl.currentTime = c.position;
+      }
+
+    } else if (state.type === 'youtube') {
+      closeDocViewer();
+      hideVideo();
+      if (typeof showYouTube === 'function') {
+        showYouTube((state.content || {}).videoId || '');
+      }
+
     } else if (state.type === 'welcome') {
       closeDocViewer();
+      hideVideo();
+      hideYouTube();
       const c = state.content || {};
       const hasMessage = c.message && c.message.trim().length > 0;
       stage.innerHTML = `

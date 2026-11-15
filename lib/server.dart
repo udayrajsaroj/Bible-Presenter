@@ -463,6 +463,113 @@ Future<void> startServer(dynamic message) async {
               };
               _broadcast(_currentState);
               break;
+
+            // ── Feature 2: local video (V1) ──
+            // Phone commands are forwarded raw as {event, data} (the TV page
+            // dispatches on `event`) while _currentState keeps a parallel
+            // snapshot so late-joining TVs can restore playback.
+            case 'cast-video':
+              _currentState = {
+                'type': 'video',
+                'content': {
+                  'url': data['url'] ?? '',
+                  'title': data['title'] ?? '',
+                  'playing': true,
+                  'position': 0,
+                },
+                'fontSize': _currentState['fontSize'] ?? 44,
+                'background': _currentState['background'],
+              };
+              _broadcast({'event': event, 'data': data});
+              _broadcast(_currentState);
+              break;
+
+            case 'video-control':
+              if (_currentState['type'] == 'video') {
+                (_currentState['content'] as Map<String, dynamic>)['playing'] =
+                    data['action'] == 'play';
+              }
+              _broadcast({'event': event, 'data': data});
+              break;
+
+            case 'video-seek':
+              if (_currentState['type'] == 'video') {
+                (_currentState['content'] as Map<String, dynamic>)['position'] =
+                    data['seconds'] ?? 0;
+              }
+              _broadcast({'event': event, 'data': data});
+              break;
+
+            case 'video-stop':
+              _currentState = {
+                'type': 'idle',
+                'content': null,
+                'fontSize': _currentState['fontSize'] ?? 44,
+                'background': _currentState['background'],
+              };
+              _broadcast({'event': event, 'data': data});
+              _broadcast(_currentState);
+              break;
+
+            // TV → phone reports: forward to every client (the phone filters
+            // by event name); video-progress keeps the state snapshot fresh.
+            case 'video-progress':
+              if (_currentState['type'] == 'video') {
+                final c = _currentState['content'] as Map<String, dynamic>;
+                c['position'] = data['position'] ?? c['position'];
+                c['duration'] = data['duration'] ?? 0;
+                c['playing'] = data['playing'] ?? c['playing'];
+              }
+              _broadcast({'event': event, 'data': data});
+              break;
+
+            case 'video-ended':
+              if (_currentState['type'] == 'video') {
+                (_currentState['content'] as Map<String, dynamic>)['playing'] =
+                    false;
+              }
+              _broadcast({'event': event, 'data': data});
+              break;
+
+            case 'video-muted':
+            case 'video-error':
+              _broadcast({'event': event, 'data': data});
+              break;
+
+            // ── Feature 3: YouTube via IFrame API (Y1) ──
+            case 'cast-youtube':
+              _currentState = {
+                'type': 'youtube',
+                'content': {
+                  'videoId': data['videoId'] ?? '',
+                  'title': data['title'] ?? '',
+                },
+                'fontSize': _currentState['fontSize'] ?? 44,
+                'background': _currentState['background'],
+              };
+              _broadcast({'event': event, 'data': data});
+              _broadcast(_currentState);
+              break;
+
+            case 'yt-play':
+            case 'yt-pause':
+            case 'yt-seek':
+            case 'yt-volume':
+            case 'yt-unmute':
+              _broadcast({'event': event, 'data': data});
+              break;
+
+            case 'yt-state':
+              if (_currentState['type'] == 'youtube') {
+                (_currentState['content'] as Map<String, dynamic>)['state'] =
+                    data['state'];
+              }
+              _broadcast({'event': event, 'data': data});
+              break;
+
+            case 'yt-error':
+              _broadcast({'event': event, 'data': data});
+              break;
           }
         } catch (e) {
           print('[Server] WS parse error: $e');
