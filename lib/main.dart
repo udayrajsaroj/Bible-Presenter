@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'server.dart';
 import 'theme.dart';
 import 'dlna_service.dart';
+import 'output_router.dart';
 import 'slide_renderer.dart';
 import 'widgets/dlna_picker_sheet.dart';
 import 'tabs/slides_tab.dart';
@@ -104,6 +105,7 @@ class _ControllerPageState extends State<ControllerPage>
   int _pdfTotalPages = 0;
   int _activeFileIndex = -1;
   String _currentlyCastUrl = '';
+  String _currentPdfLocalPath = '';
 
   // ── Video remote state (Feature 2) ──
   double _videoPosition = 0;
@@ -209,6 +211,7 @@ class _ControllerPageState extends State<ControllerPage>
     SlideRenderer.uploadDirPath =
         '${(await getApplicationDocumentsDirectory()).path}/biblepresenter_uploads';
     SlideRenderer.deviceIp = _deviceIp;
+    SlideRenderer.serverPort = 3000; // the phone always connects to 3000
     await _dlna.start();
     await _checkReconnectBanner();
 
@@ -513,6 +516,7 @@ class _ControllerPageState extends State<ControllerPage>
       'fontSize': BibleState.of(context).fontSize,
       if (_bgUrl != null) 'background': {'url': _bgUrl}
     });
+    _preRenderNext();
   }
 
   void _prevStanza() {
@@ -930,6 +934,64 @@ class _ControllerPageState extends State<ControllerPage>
   }
 
   // ══════════════════ DLNA TV DIRECT (Feature 1) ══════════════════
+  /// Pre-renders the likely next state (next verse / stanza / slide / PDF
+  /// page) while the current one is on screen (plan 4.3 latency lever).
+  void _preRenderNext() {
+    if (!_dlna.isConnected || _tvState['type'] == 'idle') return;
+    try {
+      final type = _tvState['type'] as String?;
+      final content = Map<String, dynamic>.from(
+          _tvState['content'] as Map? ?? {});
+      switch (type) {
+        case 'verse':
+          final bs = BibleState.of(context);
+          final vList = (bs.selectedBookChapters?[bs.selectedChapter] ?? {})
+              .keys
+              .toList()
+            ..sort();
+          final idx = vList.indexOf(bs.selectedVerse);
+          if (idx < 0 || idx >= vList.length - 1) return;
+          final nv = bs.bible[bs.selectedBook]?[bs.selectedChapter]
+              ?[vList[idx + 1]];
+          content['verse'] = vList[idx + 1];
+          content['textEn'] = nv?['en'] ?? '';
+          content['textHi'] = nv?['hi'] ?? '';
+          content['text'] = nv?['hi'] ?? nv?['en'] ?? '';
+          OutputRouter.instance.preRender(
+              {'type': 'verse', 'content': content}, context);
+          break;
+        case 'slide':
+          final next = _activeSlide + 1;
+          if (next >= _slides.length) return;
+          final sl = _slides[next];
+          OutputRouter.instance.preRender({
+            'type': 'slide',
+            'content': {
+              'title': sl['title'] ?? '',
+              'subtitle': sl['subtitle'] ?? '',
+              'text': sl['text'] ?? '',
+              'fontSize': BibleState.of(context).fontSize,
+              if (_bgUrl != null) 'background': {'url': _bgUrl}
+            }
+          }, context);
+          break;
+        case 'song':
+          final stanzas = List<String>.from(content['stanzas'] ?? []);
+          final next = (content['currentStanza'] as int? ?? 0) + 1;
+          if (next >= stanzas.length) return;
+          content['currentStanza'] = next;
+          OutputRouter.instance.preRender(
+              {'type': 'song', 'content': content}, context);
+          break;
+        case 'pdf':
+          final next = _pdfCurrentPage + 1;
+          if (_pdfTotalPages > 0 && next > _pdfTotalPages) return;
+          OutputRouter.instance.preRenderPdfPage(
+              _currentPdfLocalPath, next, context);
+          break;
+      }
+    } catch (_) {}
+  }
   /// Renders whatever is currently on the presentation screen as a full-HD
   /// PNG and pushes it to the connected TV (SetAVTransportURI + Play).
   Future<void> _castCurrentToDlna() async {
@@ -1012,8 +1074,15 @@ class _ControllerPageState extends State<ControllerPage>
   }
 
   void _emit(String event, Map<String, dynamic> data) {
+    // OutputRouter fan-out (plan 4.2): with a DLNA TV attached, every cast
+    // action ALSO renders the state and pushes it to the renderer — even
+    // when no browser TV is attached. YouTube never travels over DLNA.
+    OutputRouter.instance.route(
+        event: event, data: data, context: context, currentState: _tvState);
     if (_channel == null || !_connected) {
-      _showSnack('Not connected to server! Reconnecting...', error: true);
+      if (!_dlna.isConnected) {
+        _showSnack('Not connected to server! Reconnecting...', error: true);
+      }
       _connectWS();
       return;
     }
@@ -1034,6 +1103,7 @@ class _ControllerPageState extends State<ControllerPage>
       'fontSize': bibleState.fontSize,
       if (_bgUrl != null) 'background': {'url': _bgUrl}
     });
+    _preRenderNext();
   }
 
   void _castSlide(int idx) {
@@ -1048,6 +1118,7 @@ class _ControllerPageState extends State<ControllerPage>
       'fontSize': BibleState.of(context).fontSize,
       if (_bgUrl != null) 'background': {'url': _bgUrl}
     });
+    _preRenderNext();
   }
 
   void _clearScreen() {
@@ -1218,11 +1289,13 @@ class _ControllerPageState extends State<ControllerPage>
     });
     if (fileType == 'pdf') {
       _currentlyCastUrl = fileUrl;
+      _currentPdfLocalPath = f['localPath'] as String? ?? '';
       _emit('cast-pdf', {
         'url': fileUrl,
         'name': fileName,
         'currentPage': 1,
-        'totalPages': 0
+        'totalPages': 0,
+        '_localPdfPath': _currentPdfLocalPath
       });
       _showSnack('Casting PDF to TV!');
     } else if (fileType == 'pptx') {
@@ -1452,16 +1525,24 @@ class _ControllerPageState extends State<ControllerPage>
   void _pdfPrevPage() {
     if (_pdfCurrentPage > 1) {
       _pdfCurrentPage--;
-      _emit('pdf-page', {'page': _pdfCurrentPage});
+      _emit('pdf-page', {
+        'page': _pdfCurrentPage,
+        '_localPdfPath': _currentPdfLocalPath
+      });
       setState(() {});
+      _preRenderNext();
     }
   }
 
   void _pdfNextPage() {
     if (_pdfTotalPages > 0 && _pdfCurrentPage >= _pdfTotalPages) return;
     _pdfCurrentPage++;
-    _emit('pdf-page', {'page': _pdfCurrentPage});
+    _emit('pdf-page', {
+      'page': _pdfCurrentPage,
+      '_localPdfPath': _currentPdfLocalPath
+    });
     setState(() {});
+    _preRenderNext();
   }
 
   Future<void> _deleteUploadedFile(int idx) async {

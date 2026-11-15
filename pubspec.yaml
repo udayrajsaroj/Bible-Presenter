@@ -16,6 +16,8 @@ dependencies:
   http: ^1.2.0
   # DLNA "TV Direct" casting (Android only — SSDP discovery + AVTransport)
   media_cast_dlna: ^0.3.1
+  # Renders PDF pages to images on the phone for TV Direct document casting
+  pdfx: ^2.9.2
   # Shelf server
   shelf: ^1.4.1
   shelf_router: ^1.1.4

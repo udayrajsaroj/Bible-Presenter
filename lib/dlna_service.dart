@@ -259,6 +259,17 @@ class DlnaService extends ChangeNotifier {
     }
   }
 
+  /// AVTransport Seek — used by the video remote in TV Direct mode (the
+  /// TV's native player honors it; see plan 6.4).
+  Future<void> seek(int seconds) async {
+    if (!_canControl) return;
+    try {
+      await _api.seek(connectedDevice!.udn, TimePosition(seconds: seconds));
+    } catch (e) {
+      debugPrint('[Dlna] seek failed: $e');
+    }
+  }
+
   /// DLNA Stop: returns the TV to idle. Also maps onto clear-screen.
   Future<void> stop() async {
     if (!_canControl) return;
