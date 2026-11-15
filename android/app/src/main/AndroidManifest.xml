@@ -40,6 +40,14 @@
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="com.biblepresenter.CastOptionsProvider" />
 
+        <!-- DLNA "TV Direct": jUPnP background service used by media_cast_dlna
+             for SSDP discovery and AVTransport control of MediaRenderer TVs.
+             Requires the CHANGE_WIFI_MULTICAST_STATE permission above so the
+             multicast lock can be acquired during the discovery window. -->
+        <service
+            android:name="org.jupnp.android.AndroidUpnpServiceImpl"
+            android:exported="false" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
