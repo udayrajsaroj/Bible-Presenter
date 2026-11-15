@@ -227,6 +227,27 @@ Future<void> startServer(dynamic message) async {
     }
   });
 
+  // ── Serve DLNA slide images (TV Direct channel) ──
+  // SlideRenderer writes PNGs into <uploadDir>/dlna/ from the main isolate;
+  // this route serves them to the TV. no-store: the TV must never cache a
+  // slide, or verse changes would show stale images.
+  router.get('/dlna/<file>', (Request req, String file) async {
+    try {
+      final safeName = file.replaceAll('..', '').split('/').last;
+      final f = File('$_uploadDir/dlna/$safeName');
+      if (!await f.exists()) {
+        return Response.notFound('no such slide');
+      }
+      return Response.ok(await f.readAsBytes(), headers: {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'no-store',
+        'Access-Control-Allow-Origin': '*',
+      });
+    } catch (e) {
+      return Response.internalServerError(body: 'Error: $e');
+    }
+  });
+
   // ── WebSocket handler ──
   final wsHandler = webSocketHandler((WebSocketChannel channel, _) {
     _clients.add(channel);
