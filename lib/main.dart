@@ -28,6 +28,7 @@ import 'widgets/section_fullscreen.dart';
 import 'widgets/schedule_detail_page.dart';
 import 'widgets/schedule_fullscreen.dart';
 import 'services/cast_service.dart';
+import 'services/bible_import.dart';
 import 'services/cast_api.g.dart';
 import 'widgets/cast_button.dart';
 import 'state/bible_state.dart';
@@ -101,6 +102,7 @@ class _ControllerPageState extends State<ControllerPage>
   // ── Files state ──
   List<Map<String, dynamic>> _uploadedFiles = [];
   bool _isUploading = false;
+  bool _importingBible = false;
   int _pdfCurrentPage = 1;
   int _pdfTotalPages = 0;
   int _activeFileIndex = -1;
@@ -953,9 +955,9 @@ class _ControllerPageState extends State<ControllerPage>
           final nv = bs.bible[bs.selectedBook]?[bs.selectedChapter]
               ?[vList[idx + 1]];
           content['verse'] = vList[idx + 1];
-          content['textEn'] = nv?['en'] ?? '';
-          content['textHi'] = nv?['hi'] ?? '';
-          content['text'] = nv?['hi'] ?? nv?['en'] ?? '';
+          content['textEn'] = nv?['secondary'] ?? '';
+          content['textHi'] = nv?['primary'] ?? '';
+          content['text'] = nv?['primary'] ?? nv?['secondary'] ?? '';
           OutputRouter.instance.preRender(
               {'type': 'verse', 'content': content}, context);
           break;
@@ -1155,9 +1157,9 @@ class _ControllerPageState extends State<ControllerPage>
       'book': bibleState.selectedBook,
       'chapter': bibleState.selectedChapter,
       'verse': bibleState.selectedVerse,
-      'textEn': v?['en'] ?? '',
-      'textHi': v?['hi'] ?? '',
-      'text': v?['hi'] ?? v?['en'] ?? '',
+      'textEn': v?['secondary'] ?? '',
+      'textHi': v?['primary'] ?? '',
+      'text': v?['primary'] ?? v?['secondary'] ?? '',
       'fontSize': bibleState.fontSize,
       if (_bgUrl != null) 'background': {'url': _bgUrl}
     });
@@ -1297,6 +1299,38 @@ class _ControllerPageState extends State<ControllerPage>
       if (mounted) {
         setState(() => _isUploading = false);
         _showSnack('Upload error: $e', error: true);
+      }
+    }
+  }
+
+  // ── Bible language import (VerseVIEW bible-database) ──
+  Future<void> _importBibleLanguage() async {
+    if (_importingBible) return;
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xml', 'json'],
+        withData: false,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final path = result.files.single.path;
+      if (path == null || path.isEmpty) {
+        _showSnack('File path not available', error: true);
+        return;
+      }
+      setState(() => _importingBible = true);
+      final imported = await BibleImport.parseFile(path);
+      await BibleState.of(context).addImportedLanguage(imported);
+      if (mounted) {
+        setState(() => _importingBible = false);
+        _showSnack(
+            '${imported.name} added — ${imported.verseCount} verses! '
+            'Pick it as Primary or Secondary in Languages.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _importingBible = false);
+        _showSnack('Import failed: $e', error: true);
       }
     }
   }
@@ -1794,8 +1828,8 @@ class _ControllerPageState extends State<ControllerPage>
         contentBuilder: () {
           final v = bibleState.bible[bibleState.selectedBook]
               ?[bibleState.selectedChapter]?[bibleState.selectedVerse];
-          final hi = v?['hi'] ?? '';
-          final en = v?['en'] ?? '';
+          final primary = v?['primary'] ?? '';
+          final secondary = v?['secondary'] ?? '';
           final ref =
               '${bibleState.selectedBook} ${bibleState.selectedChapter}:${bibleState.selectedVerse}';
           return Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1806,8 +1840,8 @@ class _ControllerPageState extends State<ControllerPage>
                     fontFamily: 'monospace',
                     fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            if (hi.isNotEmpty)
-              Text(hi,
+            if (primary.isNotEmpty)
+              Text(primary,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       color: Colors.white,
@@ -1821,9 +1855,10 @@ class _ControllerPageState extends State<ControllerPage>
                             color: Colors.black.withValues(alpha: 0.9),
                             blurRadius: 20)
                       ])),
-            if (hi.isNotEmpty && en.isNotEmpty) const SizedBox(height: 12),
-            if (en.isNotEmpty)
-              Text('"$en"',
+            if (primary.isNotEmpty && secondary.isNotEmpty)
+              const SizedBox(height: 12),
+            if (secondary.isNotEmpty)
+              Text('"$secondary"',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       color: Colors.white70,
@@ -2735,9 +2770,16 @@ class _ControllerPageState extends State<ControllerPage>
                     selChapter: bible.selectedChapter,
                     selVerse: bible.selectedVerse,
                     fontSize: bible.fontSize,
+                    languages: bible.languages,
+                    primaryLang: bible.primaryLang,
+                    secondaryLang: bible.secondaryLang,
+                    importingLanguage: _importingBible,
                     onBookChanged: (val) => bible.selectedBook = val,
                     onChapterChanged: (val) => bible.selectedChapter = val,
                     onVerseChanged: (val) => bible.selectedVerse = val,
+                    onPrimaryLangChanged: (val) => bible.primaryLang = val,
+                    onSecondaryLangChanged: (val) => bible.secondaryLang = val,
+                    onImportLanguage: _importBibleLanguage,
                     onCastVerse: _castVerse,
                     onPrevVerse: _prevVerse,
                     onNextVerse: _nextVerse,

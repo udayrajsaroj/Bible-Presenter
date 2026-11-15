@@ -3,11 +3,31 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../services/bible_import.dart';
 
 final defaultAssetBundle = rootBundle;
 
-/// Bible state model
+/// Verse record inside the merged bible view. The app displays any two of
+/// the installed languages at a time (primary big on TV, secondary below),
+/// so records carry 'primary' / 'secondary' instead of hardcoded languages.
+typedef VerseRecord = Map<String, String>;
+
+/// Bible state model with multi-language support. Built-in English + Hindi
+/// ship as assets; more languages are imported from VerseVIEW
+/// bible-database files (Zefania XML / app JSON) via BibleImport.
 class BibleState extends ChangeNotifier {
+  /// Per-language data: code → {book: {chapter: {verse: text}}}.
+  final Map<String, Map<String, dynamic>> _langData = {};
+
+  /// Installed languages: code → display name (built-ins + imported).
+  Map<String, String> _languages = {'en': 'English', 'hi': 'Hindi'};
+
+  String _primaryLang = 'hi';
+  String _secondaryLang = 'en';
+
+  /// Merged view for the UI: {book: {chapter: {verse: {'primary', 'secondary'}}}}.
   Map<String, Map<int, Map<int, Map<String, String>>>> _bible = {};
   bool _bibleLoaded = false;
   String _selectedBook = 'Psalms';
@@ -16,7 +36,7 @@ class BibleState extends ChangeNotifier {
   int _fontSize = 44;
 
   BibleState() {
-    _loadBible();
+    _loadAll();
   }
 
   // Getters
@@ -26,6 +46,9 @@ class BibleState extends ChangeNotifier {
   int get selectedChapter => _selectedChapter;
   int get selectedVerse => _selectedVerse;
   int get fontSize => _fontSize;
+  Map<String, String> get languages => _languages;
+  String get primaryLang => _primaryLang;
+  String get secondaryLang => _secondaryLang;
 
   // Bible data access
   Map<int, Map<int, Map<String, String>>>? get selectedBookChapters =>
@@ -72,72 +95,115 @@ class BibleState extends ChangeNotifier {
     }
   }
 
+  // ── Language selection ──
+
+  set primaryLang(String code) {
+    if (!_languages.containsKey(code) || code == _primaryLang) return;
+    _primaryLang = code;
+    if (_secondaryLang == code) _secondaryLang = '';
+    _persistSelection();
+    _rebuild();
+    notifyListeners();
+  }
+
+  set secondaryLang(String code) {
+    if (code.isNotEmpty && !_languages.containsKey(code)) return;
+    if (code == _secondaryLang) return;
+    if (code == _primaryLang) return; // can't use the same language twice
+    _secondaryLang = code;
+    _persistSelection();
+    _rebuild();
+    notifyListeners();
+  }
+
+  Future<void> _persistSelection() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('bible_primary_lang', _primaryLang);
+      await prefs.setString('bible_secondary_lang', _secondaryLang);
+    } catch (_) {}
+  }
+
+  /// Registers an imported bible and makes it available for selection.
+  Future<void> addImportedLanguage(ImportedBible imported) async {
+    await BibleImport.saveLanguage(
+        imported.code, imported.name, imported.data);
+    _langData[imported.code] = imported.data;
+    _languages = {..._languages, imported.code: imported.name};
+    _persistSelection();
+    _rebuild();
+    notifyListeners();
+  }
+
+  Future<void> removeImportedLanguage(String code) async {
+    if (code == 'en' || code == 'hi') return; // built-ins stay
+    await BibleImport.deleteLanguage(code);
+    _langData.remove(code);
+    _languages = Map.of(_languages)..remove(code);
+    if (_primaryLang == code) _primaryLang = 'hi';
+    if (_secondaryLang == code) _secondaryLang = 'en';
+    _persistSelection();
+    _rebuild();
+    notifyListeners();
+  }
+
   // Provider pattern
   static BibleState of(BuildContext context) {
     return context.read<BibleState>();
   }
 
-  // Private methods
-  Future<void> _loadBible() async {
+  // ── Loading ──
+
+  Future<void> _loadAll() async {
     try {
-      // Load with the same logic as in main.dart for consistency
-      final enJsonStr =
-          await defaultAssetBundle.loadString('assets/bible_en.json');
-      final enData = jsonDecode(enJsonStr) as Map<String, dynamic>;
-      final hiJsonStr =
-          await defaultAssetBundle.loadString('assets/bible_hi.json');
-      final hiData = jsonDecode(hiJsonStr) as Map<String, dynamic>;
-      final Map<String, Map<int, Map<int, Map<String, String>>>> bible = {};
+      final prefs = await SharedPreferences.getInstance();
 
-      for (final bookEntry in enData.entries) {
-        final bookName = bookEntry.key;
-        final chapters = bookEntry.value as Map<String, dynamic>;
-        bible[bookName] = {};
-        for (final chapterEntry in chapters.entries) {
-          final chapterNum = int.tryParse(chapterEntry.key) ?? 0;
-          final verses = chapterEntry.value as Map<String, dynamic>;
-          bible[bookName]![chapterNum] = {};
-          for (final verseEntry in verses.entries) {
-            final verseNum = int.tryParse(verseEntry.key) ?? 0;
-            bible[bookName]![chapterNum]![verseNum] = {
-              'en': verseEntry.value.toString(),
-              'hi': ''
-            };
-          }
-        }
+      // Built-in languages ship as assets.
+      final enData = jsonDecode(
+              await defaultAssetBundle.loadString('assets/bible_en.json'))
+          as Map<String, dynamic>;
+      final hiData = jsonDecode(
+              await defaultAssetBundle.loadString('assets/bible_hi.json'))
+          as Map<String, dynamic>;
+      _langData['en'] = enData;
+      _langData['hi'] = hiData;
+
+      // Imported languages from disk (registered in prefs).
+      final imported = await BibleImport.loadImported();
+      for (final entry in imported.entries) {
+        final data = await BibleImport.loadLanguageFile(entry.key);
+        if (data != null) _langData[entry.key] = data;
       }
+      _languages = {
+        'en': 'English',
+        'hi': 'Hindi',
+        ...imported,
+      };
 
-      for (final bookEntry in hiData.entries) {
-        final bookName = bookEntry.key;
-        final chapters = bookEntry.value as Map<String, dynamic>;
-        if (!bible.containsKey(bookName)) bible[bookName] = {};
-        for (final chapterEntry in chapters.entries) {
-          final chapterNum = int.tryParse(chapterEntry.key) ?? 0;
-          final verses = chapterEntry.value as Map<String, dynamic>;
-          if (!bible[bookName]!.containsKey(chapterNum))
-            bible[bookName]![chapterNum] = {};
-          for (final verseEntry in verses.entries) {
-            final verseNum = int.tryParse(verseEntry.key) ?? 0;
-            if (bible[bookName]![chapterNum]!.containsKey(verseNum)) {
-              bible[bookName]![chapterNum]![verseNum]!['hi'] =
-                  verseEntry.value.toString();
-            } else {
-              bible[bookName]![chapterNum]![verseNum] = {
-                'en': '',
-                'hi': verseEntry.value.toString()
-              };
-            }
-          }
-        }
-      }
+      // Restore selections; fall back to defaults when a language vanished.
+      final p = prefs.getString('bible_primary_lang') ?? 'hi';
+      final s = prefs.getString('bible_secondary_lang') ?? 'en';
+      _primaryLang = _languages.containsKey(p) ? p : 'hi';
+      _secondaryLang = (_languages.containsKey(s) && s != _primaryLang)
+          ? s
+          : (_primaryLang == 'en' ? 'hi' : 'en');
 
-      _bible = bible;
-      _bibleLoaded = true;
+      _rebuild();
+
       if (_bible.isNotEmpty) {
-        _selectedBook = _bible.keys.first;
-        _selectedChapter = _bible[_selectedBook]!.keys.first;
-        _selectedVerse = _bible[_selectedBook]![_selectedChapter]!.keys.first;
+        if (!_bible.containsKey(_selectedBook)) {
+          _selectedBook = _bible.keys.first;
+        }
+        if (!_bible[_selectedBook]!.containsKey(_selectedChapter)) {
+          _selectedChapter = _bible[_selectedBook]!.keys.first;
+        }
+        if (!_bible[_selectedBook]![_selectedChapter]!
+            .containsKey(_selectedVerse)) {
+          _selectedVerse =
+              _bible[_selectedBook]![_selectedChapter]!.keys.first;
+        }
       }
+      _bibleLoaded = true;
       notifyListeners();
     } catch (e) {
       if (kDebugMode) {
@@ -154,79 +220,84 @@ class BibleState extends ChangeNotifier {
     }
   }
 
+  /// Rebuilds the merged view from the selected primary + secondary
+  /// languages. Book/chapter/verse numbering follows the primary language;
+  /// secondary text is attached where the same reference exists.
+  void _rebuild() {
+    final primary = _langData[_primaryLang];
+    final secondary = _secondaryLang.isEmpty ? null : _langData[_secondaryLang];
+    final Map<String, Map<int, Map<int, Map<String, String>>>> bible = {};
+
+    void merge(Map<String, dynamic>? data, String slot) {
+      if (data == null) return;
+      for (final bookEntry in data.entries) {
+        final bookName = bookEntry.key;
+        final chapters = bookEntry.value as Map<String, dynamic>;
+        final bookMap =
+            (bible[bookName] ??= <int, Map<int, Map<String, String>>>{});
+        for (final chapterEntry in chapters.entries) {
+          final chapterNum = int.tryParse(chapterEntry.key) ?? 0;
+          final verses = chapterEntry.value as Map<String, dynamic>;
+          final chapterMap =
+              (bookMap[chapterNum] ??= <int, Map<String, String>>{});
+          for (final verseEntry in verses.entries) {
+            final verseNum = int.tryParse(verseEntry.key) ?? 0;
+            final record =
+                (chapterMap[verseNum] ??= <String, String>{'primary': '', 'secondary': ''});
+            record[slot] = verseEntry.value.toString();
+          }
+        }
+      }
+    }
+
+    merge(primary, 'primary');
+    merge(secondary, 'secondary');
+
+    _bible = bible;
+  }
+
   Map<String, Map<int, Map<int, Map<String, String>>>> _fallbackBible() {
     return {
       'Psalms': {
         23: {
           1: {
-            'en': 'The Lord is my shepherd; I shall not want.',
-            'hi': 'यहोवा मेरा चरवाहा है, मुझे कोई घटी न होगी।'
+            'primary': 'यहोवा मेरा चरवाहा है, मुझे कोई घटी न होगा।',
+            'secondary': 'The Lord is my shepherd; I shall not want.'
           },
           2: {
-            'en': 'He maketh me to lie down in green pastures.',
-            'hi': 'वह मुझे हरी हरी चराइयों में बैठाता है।'
+            'primary': 'वह मुझे हरी हरी चराइयों में बैठाता है।',
+            'secondary': 'He maketh me to lie down in green pastures.'
           },
           4: {
-            'en':
-                'Yea, though I walk through the valley of the shadow of death, I will fear no evil.',
-            'hi':
-                'चाहे मैं मृत्यु की छाया की तराई में भी चलूं, मैं किसी विपत्ति से न डरूंगा।'
+            'primary': 'चाहे मैं मृत्यु की छाया की तराई में भी चलूं, मैं किसी विपत्ति से न डरूंगा।',
+            'secondary': 'Yea, though I walk through the valley of the shadow of death, I will fear no evil.'
           },
           6: {
-            'en':
-                'Surely goodness and mercy shall follow me all the days of my life.',
-            'hi': 'निश्चय भलाई और करुणा मेरे जीवन भर मेरे साथ रहेंगी।'
+            'primary': 'निश्चय भलाई और करुणा मेरे जीवन भर मेरे साथ रहेंगी।',
+            'secondary': 'Surely goodness and mercy shall follow me all the days of my life.'
           },
         },
         119: {
           105: {
-            'en': 'Thy word is a lamp unto my feet, and a light unto my path.',
-            'hi':
-                'तेरा वचन मेरे पांव के लिये दीपक, और मेरे मार्ग के लिये प्रकाश है।'
+            'primary': 'तेरा वचन मेरे पांव के लिये दीपक, और मेरे मार्ग के लिये प्रकाश है।',
+            'secondary': 'Thy word is a lamp unto my feet, and a light unto my path.'
           }
         },
       },
       'John': {
         3: {
           16: {
-            'en':
-                'For God so loved the world, that he gave his only begotten Son.',
-            'hi':
-                'क्योंकि परमेश्वर ने जगत से ऐसा प्रेम रखा कि उस ने अपना एकलौता पुत्र दे दिया।'
+            'primary': 'क्योंकि परमेश्वर ने जगत से ऐसा प्रेम रखा कि उस ने अपना एकलौता पुत्र दे दिया।',
+            'secondary': 'For God so loved the world, that he gave his only begotten Son.'
           }
         },
         14: {
           6: {
-            'en': 'I am the way, the truth, and the life.',
-            'hi': 'मार्ग और सत्य और जीवन मैं ही हूं।'
-          }
-        },
-      },
-      'Romans': {
-        8: {
-          28: {
-            'en': 'All things work together for good to them that love God.',
-            'hi':
-                'जो लोग परमेश्वर से प्रेम रखते हैं उनके लिये सब बातें मिलकर भलाई ही को उत्पन्न करती हैं।'
-          }
-        },
-      },
-      'Philippians': {
-        4: {
-          13: {
-            'en': 'I can do all things through Christ which strengtheneth me.',
-            'hi':
-                'मैं मसीह के द्वारा जो मुझे सामर्थ देता है सब कुछ कर सकता हूं।'
+            'primary': 'मैं ही रास्ता, मैं ही सत्य, और मैं ही जीवन हूं।',
+            'secondary': 'I am the way, the truth, and the life.'
           }
         },
       },
     };
   }
 }
-
-// Provider accessors
-BibleState bibleStateOf(BuildContext context, {bool listen = true}) =>
-    Provider.of<BibleState>(context, listen: listen);
-
-BibleState? bibleStateMaybeOf(BuildContext context) =>
-    context.read<BibleState?>();

@@ -193,6 +193,36 @@ android/
 
 ---
 
+## 🌐 Bible Languages (VerseVIEW Import)
+
+The app ships with **English + Hindi** built in. Any number of extra languages
+can be imported from the [VerseVIEW bible-database](https://www.verseview.com/bible-database)
+(60+ translations in 40+ languages: Malayalam, Tamil, Telugu, Bengali, Kannada, …):
+
+1. Download a bible file from the VerseVIEW database (Zefania `.xml`)
+2. In the app: **Bible tab → Add Language → pick the file**
+3. Choose it as **Primary** (big on TV) and optionally a **Secondary** language
+
+The import runs on the phone (streaming XML parser, no PC step), the language
+is stored in app documents and persists across restarts. VerseVIEW also offers
+an app-format JSON, which imports the same way.
+
+**Bulk converting on a PC** (optional): `scripts/zefania_to_app_json.py`
+converts Zefania XML to the app JSON format:
+
+```bash
+python3 scripts/zefania_to_app_json.py "Malayalam Bible.xml" -o converted/
+# see a working sample: download/bible_kjv_en.json (public-domain KJV)
+```
+
+> ⚠️ **Licensing**: the VerseVIEW database mixes public-domain translations
+> (KJV, ASV, WEB, …) and copyright-restricted ones (NIV, ESV, …). Import and
+> use in your ministry according to each version's own terms; do not
+> redistribute converted copyrighted files.
+
+---
+
+
 ## 🛠️ Tech Stack
 
 | Component       | Technology                          |
