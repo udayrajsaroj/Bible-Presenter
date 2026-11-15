@@ -47,6 +47,14 @@ String _contentType(String filename) {
     'jpeg': 'image/jpeg',
     'webp': 'image/webp',
     'bmp': 'image/bmp',
+    // Video (Feature 2). MP4/H.264 is the reliable recommendation across TV
+    // browsers and DLNA players; browsers vary on mkv.
+    'mp4': 'video/mp4',
+    'm4v': 'video/mp4',
+    'webm': 'video/webm',
+    'mov': 'video/quicktime',
+    'mkv': 'video/x-matroska',
+    'avi': 'video/x-msvideo',
   };
   return types[ext] ?? 'application/octet-stream';
 }
@@ -56,6 +64,9 @@ String _fileType(String filename) {
   final ext = filename.split('.').last.toLowerCase();
   if (ext == 'pdf') return 'pdf';
   if (ext == 'ppt' || ext == 'pptx') return 'pptx';
+  if (['mp4', 'm4v', 'webm', 'mov', 'mkv', 'avi'].contains(ext)) {
+    return 'video';
+  }
   return 'other';
 }
 
@@ -150,27 +161,39 @@ Future<void> startServer(dynamic message) async {
 
   // ── File upload endpoint ──
   router.post('/api/upload', (Request req) async {
+    IOSink? sink;
     try {
       final filename = req.requestedUri.queryParameters['name'] ?? 'upload.pdf';
-      final bytes = await req.read().expand((list) => list).toList();
-
       // Sanitize filename
       final safeName = filename.replaceAll(RegExp(r'[^\w.\-]'), '_');
       final file = File('$_uploadDir/$safeName');
-      await file.writeAsBytes(bytes);
 
-      print('[Server] File uploaded: $safeName (${bytes.length} bytes)');
+      // Stream the body straight to disk. Videos reach 1–2 GB (risk R4):
+      // buffering the whole request in memory can exhaust the phone, so the
+      // Shelf request stream writes incrementally and memory stays flat.
+      int total = 0;
+      sink = file.openWrite();
+      await for (final chunk in req.read()) {
+        total += chunk.length;
+        sink.add(chunk);
+      }
+      await sink.flush();
+      await sink.close();
+      sink = null;
+
+      print('[Server] File uploaded: $safeName ($total bytes)');
 
       return _cors(Response.ok(
         jsonEncode({
           'url': '/uploads/$safeName',
           'name': safeName,
           'type': _fileType(safeName),
-          'size': bytes.length,
+          'size': total,
         }),
         headers: {'Content-Type': 'application/json'},
       ));
     } catch (e) {
+      await sink?.close();
       print('[Server] Upload error: $e');
       return _cors(Response.internalServerError(
         body: jsonEncode({'error': e.toString()}),
@@ -215,12 +238,64 @@ Future<void> startServer(dynamic message) async {
       if (!await file.exists()) {
         return Response.notFound('File not found');
       }
-      final bytes = await file.readAsBytes();
-      return Response.ok(bytes, headers: {
+      final headers = {
         'Content-Type': _contentType(safeName),
         'Access-Control-Allow-Origin': '*',
         'Content-Disposition': 'inline; filename="$safeName"',
         'Cache-Control': 'no-cache',
+        'Accept-Ranges': 'bytes',
+      };
+
+      // HTTP Range support: TV browsers request partial content so the
+      // <video> element can seek inside 1 GB files without downloading
+      // them first. Without a 206 response, video-seek remote control
+      // would not work until the whole file is buffered.
+      final stat = await file.stat();
+      final rangeHeader = req.headers.value('range');
+      if (rangeHeader != null) {
+        final match = RegExp(r'bytes=(\d*)-(\d*)').firstMatch(rangeHeader);
+        if (match != null) {
+          final startStr = match.group(1);
+          final endStr = match.group(2);
+          int start = startStr != null && startStr.isNotEmpty
+              ? int.parse(startStr)
+              : 0;
+          int end = endStr != null && endStr.isNotEmpty
+              ? int.parse(endStr)
+              : stat.size - 1;
+          if (start >= stat.size) {
+            return Response(
+                416,
+                body: 'Requested range not satisfiable',
+                headers: {'Content-Range': 'bytes */${stat.size}'});
+          }
+          if (end >= stat.size) end = stat.size - 1;
+          if (startStr == null || startStr.isEmpty) {
+            // Suffix range (bytes=-N): last N bytes.
+            final n = int.parse(endStr!);
+            start = (stat.size - n).clamp(0, stat.size - 1);
+            end = stat.size - 1;
+          }
+          final length = end - start + 1;
+          final raf = await file.open();
+          try {
+            await raf.setPosition(start);
+            final bytes = await raf.read(length);
+            return Response(206, body: bytes, headers: {
+              ...headers,
+              'Content-Range': 'bytes $start-$end/${stat.size}',
+              'Content-Length': '$length',
+            });
+          } finally {
+            await raf.close();
+          }
+        }
+      }
+
+      final bytes = await file.readAsBytes();
+      return Response.ok(bytes, headers: {
+        ...headers,
+        'Content-Length': '${stat.size}',
       });
     } catch (e) {
       return Response.internalServerError(body: 'Error: $e');
