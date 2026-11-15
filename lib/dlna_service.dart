@@ -102,7 +102,7 @@ class DlnaService extends ChangeNotifier {
 
   void _handleDeviceFound(DlnaDevice device) {
     if (!device.deviceType.contains('MediaRenderer')) return;
-    final i = devices.indexWhere((d) => d.udn == device.udn);
+    final i = devices.indexWhere((d) => d.udn.value == device.udn.value);
     if (i >= 0) {
       devices[i] = device;
     } else {
@@ -112,19 +112,20 @@ class DlnaService extends ChangeNotifier {
   }
 
   void _handleDeviceLost(DeviceUdn udn) {
-    devices.removeWhere((d) => d.udn == udn);
-    if (connectedDevice?.udn == udn) {
+    // DeviceUdn is a plain Pigeon data class without ==, compare by value.
+    devices.removeWhere((d) => d.udn.value == udn.value);
+    if (connectedDevice?.udn.value == udn.value) {
       _markOffline();
     }
     notifyListeners();
   }
 
   void _handleRendererOffline(DeviceUdn udn) {
-    if (connectedDevice?.udn == udn) {
+    if (connectedDevice?.udn.value == udn.value) {
       _markOffline();
       notifyListeners();
     }
-    devices.removeWhere((d) => d.udn == udn);
+    devices.removeWhere((d) => d.udn.value == udn.value);
     notifyListeners();
   }
 

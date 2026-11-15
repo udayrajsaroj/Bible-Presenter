@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
 /// Off-screen slide renderer for DLNA "TV Direct" casting (Phase D1).
@@ -271,8 +272,8 @@ class SlideRenderer {
     return (base * scale).clamp(14.0, 220.0).toDouble();
   }
 
-  static const TextShadow _tvShadow =
-      TextShadow(color: Color(0xE6000000), blurRadius: 30, offset: Offset(0, 2));
+  static const Shadow _tvShadow =
+      Shadow(color: Color(0xE6000000), blurRadius: 30, offset: Offset(0, 2));
 
   static Widget _verseContent(Map<String, dynamic> c) {
     final hi = c['textHi'] as String? ?? '';
@@ -316,7 +317,7 @@ class SlideRenderer {
             letterSpacing: 6,
             fontWeight: FontWeight.w700,
             fontFamilyFallback: ['serif'],
-            shadows: [TextShadow(color: Color(0x66c9a96e), blurRadius: 30)],
+            shadows: [Shadow(color: Color(0x66c9a96e), blurRadius: 30)],
           ),
         ),
       ],

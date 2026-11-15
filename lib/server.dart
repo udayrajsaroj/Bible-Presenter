@@ -251,7 +251,7 @@ Future<void> startServer(dynamic message) async {
       // them first. Without a 206 response, video-seek remote control
       // would not work until the whole file is buffered.
       final stat = await file.stat();
-      final rangeHeader = req.headers.value('range');
+      final rangeHeader = req.headers['range'];
       if (rangeHeader != null) {
         final match = RegExp(r'bytes=(\d*)-(\d*)').firstMatch(rangeHeader);
         if (match != null) {

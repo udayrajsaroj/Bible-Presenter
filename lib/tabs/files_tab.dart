@@ -79,8 +79,6 @@ class FilesTab extends StatelessWidget {
     required this.onYtRemoveFromQueue,
   });
 
-  static const _videoExts = ['mp4', 'm4v', 'webm', 'mov', 'mkv', 'avi'];
-
   String _formatTime(double seconds) {
     final s = seconds.floor();
     final m = s ~/ 60;
