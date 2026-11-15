@@ -26,6 +26,20 @@ class FilesTab extends StatelessWidget {
   final void Function(double seconds) onVideoSeek;
   final VoidCallback onVideoStop;
   final VoidCallback onVideoUnmute;
+  // ── YouTube remote (Feature 3) ──
+  final TextEditingController ytUrlCtrl;
+  final List<String> ytQueue;
+  final int ytQueueIndex;
+  final double ytPosition;
+  final double ytDuration;
+  final double ytVolume;
+  final bool ytPlaying;
+  final VoidCallback onCastYouTubeUrl;
+  final VoidCallback onYtPlayPause;
+  final void Function(double seconds) onYtSeek;
+  final void Function(double value) onYtVolume;
+  final VoidCallback onYtStop;
+  final void Function(int idx) onYtRemoveFromQueue;
 
   const FilesTab({
     super.key,
@@ -50,6 +64,19 @@ class FilesTab extends StatelessWidget {
     required this.onVideoSeek,
     required this.onVideoStop,
     required this.onVideoUnmute,
+    required this.ytUrlCtrl,
+    required this.ytQueue,
+    required this.ytQueueIndex,
+    required this.ytPosition,
+    required this.ytDuration,
+    required this.ytVolume,
+    required this.ytPlaying,
+    required this.onCastYouTubeUrl,
+    required this.onYtPlayPause,
+    required this.onYtSeek,
+    required this.onYtVolume,
+    required this.onYtStop,
+    required this.onYtRemoveFromQueue,
   });
 
   static const _videoExts = ['mp4', 'm4v', 'webm', 'mov', 'mkv', 'avi'];
@@ -270,6 +297,193 @@ class FilesTab extends StatelessWidget {
                 Expanded(
                   child: GestureDetector(
                     onTap: onVideoStop,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade900.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.shade800.withOpacity(0.4))),
+                      child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(Icons.stop, size: 16, color: Colors.red),
+                        SizedBox(width: 6),
+                        Text('Stop', style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
+                      ]),
+                    ),
+                  ),
+                ),
+              ]),
+            ]),
+          ),
+        ])),
+
+        const SizedBox(height: 12),
+
+        // ── YouTube casting (Feature 3) ──
+        appCard(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            label('YOUTUBE'),
+            const Row(children: [
+              Icon(Icons.wifi, size: 11, color: kMuted),
+              SizedBox(width: 4),
+              Text('needs internet', style: TextStyle(color: kMuted, fontSize: 9)),
+            ]),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(
+              child: TextField(
+                controller: ytUrlCtrl,
+                onSubmitted: (_) => onCastYouTubeUrl(),
+                style: const TextStyle(color: kText, fontSize: 12),
+                decoration: InputDecoration(
+                  hintText: 'Paste a YouTube link…',
+                  hintStyle: const TextStyle(color: kMuted, fontSize: 11),
+                  filled: true,
+                  fillColor: kBg,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: onCastYouTubeUrl,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade900.withOpacity(0.35),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade700.withOpacity(0.6))),
+                child: Row(children: [
+                  Icon(Icons.play_circle_fill, size: 16, color: Colors.red.shade400),
+                  const SizedBox(width: 6),
+                  Text('Cast', style: TextStyle(color: Colors.red.shade400, fontSize: 11, fontWeight: FontWeight.bold)),
+                ]),
+              ),
+            ),
+          ]),
+          if (ytQueue.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text('QUEUE (${ytQueueIndex + 1}/${ytQueue.length})',
+                style: const TextStyle(color: kMuted, fontSize: 9, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ...ytQueue.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final id = entry.value;
+              final isCurrent = idx == ytQueueIndex;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: isCurrent ? const Color(0xFF0c1f3a) : kBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: isCurrent ? kAccent.withOpacity(0.7) : kBorder)),
+                child: Row(children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(5),
+                    child: Image.network('https://i.ytimg.com/vi/$id/mqdefault.jpg',
+                      width: 56, height: 32, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 56, height: 32, color: kBg2,
+                        child: const Icon(Icons.play_circle_outline, size: 14, color: kMuted))),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Video ${idx + 1}  ·  $id',
+                        style: TextStyle(fontSize: 10, fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400, color: isCurrent ? kText : kMuted),
+                        overflow: TextOverflow.ellipsis),
+                      if (isCurrent)
+                        const Text('Now playing', style: TextStyle(color: kAccent, fontSize: 8, fontWeight: FontWeight.bold)),
+                    ]),
+                  ),
+                  GestureDetector(
+                    onTap: () => onYtRemoveFromQueue(idx),
+                    child: Icon(Icons.close, size: 14, color: Colors.red.shade400),
+                  ),
+                ]),
+              );
+            }),
+          ],
+        ])),
+
+        const SizedBox(height: 12),
+
+        // ── YouTube remote (Feature 3) ──
+        if (tvState['type'] == 'youtube') appCard(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            label('YOUTUBE REMOTE'),
+            if (videoMuted)
+              GestureDetector(
+                onTap: onVideoUnmute,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade900.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(100),
+                    border: Border.all(color: Colors.orange.shade700)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.volume_off, size: 12, color: Colors.orange.shade400),
+                    const SizedBox(width: 5),
+                    Text('Unmute', style: TextStyle(color: Colors.orange.shade400, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ]),
+                ),
+              ),
+          ]),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: kBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: kAccent.withOpacity(0.3))),
+            child: Column(children: [
+              Slider(
+                value: ytDuration > 0 ? ytPosition.clamp(0.0, ytDuration) : 0,
+                max: ytDuration > 0 ? ytDuration : 1,
+                onChanged: ytDuration > 0 ? (v) => onYtSeek(v) : null,
+                activeColor: kAccent,
+                inactiveColor: kBorder,
+              ),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Text(_formatTime(ytPosition), style: const TextStyle(color: kMuted, fontFamily: 'monospace', fontSize: 10)),
+                Text(_formatTime(ytDuration), style: const TextStyle(color: kMuted, fontFamily: 'monospace', fontSize: 10)),
+              ]),
+              const SizedBox(height: 6),
+              Row(children: [
+                Icon(Icons.volume_down, size: 16, color: kMuted),
+                Expanded(
+                  child: Slider(
+                    value: ytVolume,
+                    max: 100,
+                    onChanged: (v) => onYtVolume(v),
+                    activeColor: kGold,
+                    inactiveColor: kBorder,
+                  ),
+                ),
+                Icon(Icons.volume_up, size: 16, color: kMuted),
+              ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: onYtPlayPause,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: kAccent.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: kAccent.withOpacity(0.4))),
+                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(ytPlaying ? Icons.pause : Icons.play_arrow, size: 16, color: kAccent),
+                        const SizedBox(width: 6),
+                        Text(ytPlaying ? 'Pause' : 'Play',
+                            style: const TextStyle(color: kAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                      ]),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: onYtStop,
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(

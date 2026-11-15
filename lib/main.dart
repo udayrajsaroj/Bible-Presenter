@@ -113,8 +113,10 @@ class _ControllerPageState extends State<ControllerPage>
   bool _ytPlaying = false;
   double _ytPosition = 0;
   double _ytDuration = 0;
+  double _ytVolumeVal = 100;
   List<String> _ytQueue = [];
   int _ytQueueIndex = -1;
+  final _ytUrlCtrl = TextEditingController();
 
   // ── Bible state ──
 
@@ -1209,6 +1211,9 @@ class _ControllerPageState extends State<ControllerPage>
             if ((data['position'] as num? ?? 0) > 0) {
               _ytPosition = (data['position'] as num).toDouble();
             }
+            if ((data['duration'] as num? ?? 0) > 0) {
+              _ytDuration = (data['duration'] as num).toDouble();
+            }
           });
         }
         break;
@@ -1230,6 +1235,83 @@ class _ControllerPageState extends State<ControllerPage>
     setState(() => _ytPlaying = true);
     _emit('cast-youtube', {'videoId': videoId, 'title': ''});
     _showSnack('Playing next video (${_ytQueueIndex + 1}/${_ytQueue.length})');
+  }
+
+  // ══════════════════ YOUTUBE CAST (Feature 3) ══════════════════
+  /// Extracts the eleven-character video ID from the three common YouTube
+  /// link forms: watch?v=, youtu.be/ and shorts/.
+  static String? extractYouTubeId(String url) {
+    final patterns = [
+      RegExp(r'v=([\w-]{11})'), // youtube.com/watch?v=ID
+      RegExp(r'youtu\.be/([\w-]{11})'), // https://youtu.be/ID
+      RegExp(r'shorts/([\w-]{11})'), // youtube.com/shorts/ID
+    ];
+    for (final re in patterns) {
+      final m = re.firstMatch(url);
+      if (m != null) return m.group(1);
+    }
+    return null;
+  }
+
+  void _castYouTubeUrl() {
+    final raw = _ytUrlCtrl.text.trim();
+    if (raw.isEmpty) return;
+    final videoId = extractYouTubeId(raw);
+    if (videoId == null) {
+      _showSnack('Paste a youtube.com/watch, youtu.be or shorts link',
+          error: true);
+      return;
+    }
+    setState(() {
+      _ytQueue.add(videoId);
+      _ytQueueIndex = _ytQueue.length - 1;
+      _ytPlaying = true;
+      _ytPosition = 0;
+      _ytDuration = 0;
+      _ytUrlCtrl.clear();
+    });
+    _emit('cast-youtube', {'videoId': videoId});
+    _showSnack('Casting YouTube to TV!');
+  }
+
+  void _ytPlayPause() {
+    if (_ytPlaying) {
+      _emit('yt-pause', {});
+      setState(() => _ytPlaying = false);
+    } else {
+      _emit('yt-play', {});
+      setState(() => _ytPlaying = true);
+    }
+  }
+
+  void _ytSeekTo(double seconds) {
+    _emit('yt-seek', {'seconds': seconds.round()});
+    setState(() => _ytPosition = seconds);
+  }
+
+  void _ytVolume(double value) {
+    _emit('yt-volume', {'value': value.round()});
+    setState(() => _ytVolumeVal = value);
+  }
+
+  void _ytStop() {
+    _emit('clear-screen', {});
+    setState(() {
+      _ytPlaying = false;
+      _ytPosition = 0;
+      _ytDuration = 0;
+      _ytQueue.clear();
+      _ytQueueIndex = -1;
+    });
+  }
+
+  void _ytRemoveFromQueue(int idx) {
+    setState(() {
+      _ytQueue.removeAt(idx);
+      if (_ytQueueIndex >= _ytQueue.length) {
+        _ytQueueIndex = _ytQueue.length - 1;
+      }
+    });
   }
 
   void _pdfPrevPage() {
@@ -2063,6 +2145,7 @@ class _ControllerPageState extends State<ControllerPage>
     _songTitleCtrl.dispose();
     _scheduleNameCtrl.dispose();
     _welcomeMsgCtrl.dispose();
+    _ytUrlCtrl.dispose();
     for (final c in _songStanzaCtrls) {
       c.dispose();
     }
@@ -2432,7 +2515,20 @@ class _ControllerPageState extends State<ControllerPage>
                   onVideoPlayPause: _videoPlayPause,
                   onVideoSeek: _videoSeekTo,
                   onVideoStop: _videoStop,
-                  onVideoUnmute: _videoUnmute),
+                  onVideoUnmute: _videoUnmute,
+                  ytUrlCtrl: _ytUrlCtrl,
+                  ytQueue: _ytQueue,
+                  ytQueueIndex: _ytQueueIndex,
+                  ytPosition: _ytPosition,
+                  ytDuration: _ytDuration,
+                  ytVolume: _ytVolumeVal,
+                  ytPlaying: _ytPlaying,
+                  onCastYouTubeUrl: _castYouTubeUrl,
+                  onYtPlayPause: _ytPlayPause,
+                  onYtSeek: _ytSeekTo,
+                  onYtVolume: _ytVolume,
+                  onYtStop: _ytStop,
+                  onYtRemoveFromQueue: _ytRemoveFromQueue),
               Consumer<BibleState>(
                 builder: (context, bible, _) => SettingsTab(
                     fontSize: bible.fontSize,
