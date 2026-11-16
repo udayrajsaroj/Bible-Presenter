@@ -54,23 +54,6 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
     if (v > 120) widget.onPrevVerse();
   }
 
-  void _openJumpSheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: kBg2,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
-      builder: (ctx) => _JumpSheet(
-        bibleState: widget.bibleState,
-        onVersePicked: () {
-          Navigator.pop(ctx);
-          widget.onCastVerse();
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -135,37 +118,54 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
           headerStrip: Container(
             height: 46,
             color: kBg,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             child: Row(children: [
-              // Reference chip → fast jump sheet.
-              Material(
-                color: kBg2,
-                borderRadius: BorderRadius.circular(20),
-                child: InkWell(
-                  onTap: _openJumpSheet,
-                  borderRadius: BorderRadius.circular(20),
-                  splashColor: kGold.withOpacity(0.3),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 5),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: kGold.withOpacity(0.6)),
-                    ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text(ref,
-                          style: const TextStyle(
-                              color: kGold,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 5),
-                      const Icon(Icons.keyboard_arrow_down,
-                          size: 15, color: kGold),
-                    ]),
-                  ),
+              // Three inline scripture selectors — any pick updates BibleState
+              // and live-casts to the TV immediately, no extra confirmation.
+              Expanded(
+                child: _RefDropdown<String>(
+                  label: 'Book',
+                  value: b.selectedBook,
+                  items: b.bible.keys.toList(), // already canonical order
+                  display: (v) => v,
+                  onChanged: (book) {
+                    if (book == null || book == b.selectedBook) return;
+                    b.selectedBook = book;
+                    widget.onCastVerse();
+                  },
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 72,
+                child: _RefDropdown<int>(
+                  label: 'Ch',
+                  value: b.selectedChapter,
+                  items: (b.bible[b.selectedBook] ?? {}).keys.toList()..sort(),
+                  display: (v) => '$v',
+                  onChanged: (ch) {
+                    if (ch == null || ch == b.selectedChapter) return;
+                    b.selectedChapter = ch;
+                    widget.onCastVerse();
+                  },
+                ),
+              ),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 62,
+                child: _RefDropdown<int>(
+                  label: 'Vs',
+                  value: b.selectedVerse,
+                  items: verses,
+                  display: (v) => '$v',
+                  onChanged: (vs) {
+                    if (vs == null || vs == b.selectedVerse) return;
+                    b.selectedVerse = vs;
+                    widget.onCastVerse();
+                  },
+                ),
+              ),
+              const SizedBox(width: 6),
               Text('Verse ${vIdx + 1} of ${verses.length}',
                   style:
                       const TextStyle(color: kMuted, fontSize: 10.5)),
@@ -238,7 +238,7 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
             ),
           ),
           dockLeft: DockNavButton(
-            label: 'PREV VERSE',
+            label: 'PREV',
             icon: Icons.skip_previous,
             iconFirst: true,
             onTap: vIdx > 0 ? widget.onPrevVerse : null,
@@ -247,7 +247,7 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
               tvState: widget.tvState,
               position: 'Verse ${vIdx + 1} of ${verses.length}'),
           dockRight: DockNavButton(
-            label: 'NEXT VERSE',
+            label: 'NEXT',
             icon: Icons.skip_next,
             onTap: vIdx < verses.length - 1 ? widget.onNextVerse : null,
           ),
@@ -268,7 +268,7 @@ class _BibleDockCounter extends StatelessWidget {
       valueListenable: tvState,
       builder: (context, state, _) {
         final live = state.isNotEmpty && state['type'] == 'verse';
-        return DockCounter(
+        return DockCounterPill(
           primary: position,
           secondary: live ? '● Live on TV' : 'Off air',
           accent: live ? Colors.green : kAccent,
@@ -278,160 +278,70 @@ class _BibleDockCounter extends StatelessWidget {
   }
 }
 
-/// Fast jump: books → chapters → verses in one scrollable bottom sheet.
-/// Picking a verse selects it in BibleState and casts it.
-class _JumpSheet extends StatelessWidget {
-  final BibleState bibleState;
-  final VoidCallback onVersePicked;
-  const _JumpSheet({required this.bibleState, required this.onVersePicked});
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Container(
-        constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.72),
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-        // Rebuild as book/chapter picks change the lists below.
-        child: ListenableBuilder(
-          listenable: bibleState,
-          builder: (context, _) {
-            final books = bibleState.bible.keys.toList()..sort();
-            final chapters =
-                (bibleState.bible[bibleState.selectedBook] ?? {}).keys.toList()
-                  ..sort();
-            final verses = (bibleState.bible[bibleState.selectedBook]
-                        ?[bibleState.selectedChapter] ??
-                    {})
-                .keys
-                .toList()
-              ..sort();
-
-            return SingleChildScrollView(
-              child:
-                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  const Text('JUMP TO SCRIPTURE',
-                      style: TextStyle(
-                          color: kGold,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.5)),
-                  const Spacer(),
-                  IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon:
-                          const Icon(Icons.close, size: 18, color: kMuted)),
-                ]),
-                const SizedBox(height: 8),
-                // Books
-                const _SheetSectionLabel('BOOK'),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: books.map((book) {
-                    final active = book == bibleState.selectedBook;
-                    return _SheetChip(
-                      label: book,
-                      active: active,
-                      onTap: () => bibleState.selectedBook = book,
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 14),
-                // Chapters
-                const _SheetSectionLabel('CHAPTER'),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: chapters.map((ch) {
-                    final active = ch == bibleState.selectedChapter;
-                    return _SheetChip(
-                      label: '$ch',
-                      active: active,
-                      width: 40,
-                      onTap: () => bibleState.selectedChapter = ch,
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 14),
-                // Verses
-                const _SheetSectionLabel('VERSE'),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: verses.map((vs) {
-                    final active = vs == bibleState.selectedVerse;
-                    return _SheetChip(
-                      label: '$vs',
-                      active: active,
-                      width: 40,
-                      onTap: () {
-                        bibleState.selectedVerse = vs;
-                        onVersePicked();
-                      },
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 6),
-              ]),
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _SheetSectionLabel extends StatelessWidget {
-  final String text;
-  const _SheetSectionLabel(this.text);
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(text,
-            style: const TextStyle(
-                color: kMuted,
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.3)),
-      );
-}
-
-class _SheetChip extends StatelessWidget {
+/// Compact inline scripture selector for the header strip: a bordered
+/// capsule with [label: value ▼] and a full list of options. Books follow
+/// canonical order (BibleState already sorts its map); chapters and verses
+/// sort numerically.
+class _RefDropdown<T> extends StatelessWidget {
   final String label;
-  final bool active;
-  final VoidCallback onTap;
-  final double? width;
-  const _SheetChip(
-      {required this.label,
-      required this.active,
-      required this.onTap,
-      this.width});
+  final T value;
+  final List<T> items;
+  final String Function(T) display;
+  final void Function(T?) onChanged;
+  final Color accent;
+
+  const _RefDropdown({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.display,
+    required this.onChanged,
+    this.accent = kGold,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: active ? kGold.withOpacity(0.22) : kBg,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        splashColor: kGold.withOpacity(0.3),
-        child: Container(
-          width: width,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border:
-                Border.all(color: active ? kGold : kBorder, width: active ? 1.5 : 1),
-          ),
-          child: Text(label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: active ? kGold : kText,
-                  fontSize: 11.5,
-                  fontWeight: active ? FontWeight.bold : FontWeight.w500)),
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: kBg2,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withOpacity(0.5), width: 1),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isExpanded: true,
+          isDense: true,
+          dropdownColor: kBg2,
+          borderRadius: BorderRadius.circular(12),
+          elevation: 8,
+          icon: Icon(Icons.keyboard_arrow_down, size: 15, color: accent),
+          style: TextStyle(
+              color: accent, fontSize: 11.5, fontWeight: FontWeight.bold),
+          selectedItemBuilder: (ctx) => items.map((_) => Text(
+                '$label: ${display(value)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: accent,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.bold),
+              )).toList(),
+          items: items
+              .map((it) => DropdownMenuItem<T>(
+                    value: it,
+                    child: Text(display(it),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: kText,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500)),
+                  ))
+              .toList(),
+          onChanged: onChanged,
         ),
       ),
     );

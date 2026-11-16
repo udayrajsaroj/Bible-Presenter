@@ -44,6 +44,9 @@ class _PdfPresenterScreenState extends State<PdfPresenterScreen> {
   String? _error;
   final Map<int, Uint8List> _pageCache = {};
 
+  /// Ensures the "sync TV to Page 1" emit happens exactly once per entry.
+  bool _initialSyncDone = false;
+
   @override
   void initState() {
     super.initState();
@@ -67,7 +70,16 @@ class _PdfPresenterScreenState extends State<PdfPresenterScreen> {
         _totalPages = doc.pagesCount;
         if (_page > doc.pagesCount) _page = doc.pagesCount;
       });
+      // Guarantee Kodi/DLNA shows the entry page immediately: the TV push
+      // competes with this open for the same file descriptor on Android, so
+      // re-emit explicitly once the document is initialized (fixes the
+      // "Page 1 skipped until Next+Prev" race).
+      if (!_initialSyncDone) {
+        _initialSyncDone = true;
+        widget.onGoToPage(_page);
+      }
       _render(_page);
+      _render(_page + 1); // pre-render the up-next card
     } catch (e) {
       if (mounted) {
         setState(() => _error = 'Could not open document preview');
@@ -108,6 +120,7 @@ class _PdfPresenterScreenState extends State<PdfPresenterScreen> {
     if (page == _page) return;
     setState(() => _page = page);
     _render(page);
+    _render(page + 1); // pre-render the up-next preview in the background
     widget.onGoToPage(page);
   }
 
@@ -138,7 +151,6 @@ class _PdfPresenterScreenState extends State<PdfPresenterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bytes = _pageCache[_page];
     return PresenterScaffold(
       leading: PresenterIconButton(
         icon: Icons.arrow_back,
@@ -168,46 +180,218 @@ class _PdfPresenterScreenState extends State<PdfPresenterScreen> {
         onHorizontalDragEnd: _onSwipe,
         child: Container(
           color: kBg,
-          alignment: Alignment.center,
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
           child: widget.localPath == null || widget.localPath!.isEmpty
-              ? _noLocalPreview()
-              : bytes == null
-                  ? Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(color: kAccent),
-                        const SizedBox(height: 12),
-                        Text(_error ?? 'Rendering page $_page…',
-                            style: const TextStyle(
-                                color: kMuted, fontSize: 12)),
-                      ],
-                    )
-                  : InteractiveViewer(
-                      maxScale: 4,
-                      child: Image.memory(bytes,
-                          fit: BoxFit.contain,
-                          alignment: Alignment.center),
-                    ),
+              ? Center(child: _noLocalPreview())
+              : _totalPages <= 0
+                  ? Center(child: _activeCard())
+                  : Column(children: [
+                      // Active live page — the card that mirrors the TV.
+                      Expanded(flex: 5, child: _activeCard()),
+                      const SizedBox(height: 10),
+                      // Upcoming page preview (~60% of the active card) so
+                      // the operator sees the next slide before advancing.
+                      Expanded(
+                        flex: 3,
+                        child: _page < _totalPages
+                            ? GestureDetector(
+                                onTap: () => _go(_page + 1),
+                                child: _previewCard(),
+                              )
+                            : _endCard(),
+                      ),
+                    ]),
         ),
       ),
       dockLeft: DockNavButton(
-        label: 'PREV PAGE',
+        label: 'PREV',
         icon: Icons.navigate_before,
         iconFirst: true,
         onTap: _page > 1 ? () => _go(_page - 1) : null,
       ),
-      dockCenter: DockCounter(
+      dockCenter: DockCounterPill(
         primary: 'Page $_page${_totalPages > 0 ? ' / $_totalPages' : ''}',
         secondary: 'tap to jump',
         accent: kAccent,
       ),
       dockRight: DockNavButton(
-        label: 'NEXT PAGE',
+        label: 'NEXT',
         icon: Icons.navigate_next,
         onTap: (_totalPages > 0 && _page >= _totalPages)
             ? null
             : () => _go(_page + 1),
+      ),
+    );
+  }
+
+  /// Top card: the live page with glowing LIVE ON TV badge + accent border.
+  Widget _activeCard() {
+    final bytes = _pageCache[_page];
+    return _stageCard(
+      page: _page,
+      bytes: bytes,
+      loadingLabel: _error ?? 'Rendering page $_page…',
+      badge: _badge(
+          icon: Icons.circle,
+          iconSize: 7,
+          label: 'LIVE ON TV',
+          fg: Colors.greenAccent,
+          bg: Colors.green.withOpacity(0.30)),
+      borderColor: kAccent,
+      borderWidth: 1.6,
+      interactive: true,
+      showPageChip: true,
+    );
+  }
+
+  /// Bottom card: preview of page N+1 (rendered in the background).
+  Widget _previewCard() {
+    final next = _page + 1;
+    final bytes = _pageCache[next];
+    return _stageCard(
+      page: next,
+      bytes: bytes,
+      loadingLabel: 'Pre-rendering page $next…',
+      badge: _badge(
+          icon: Icons.skip_next,
+          iconSize: 11,
+          label: 'UP NEXT (Page $next)',
+          fg: kGold,
+          bg: kGold.withOpacity(0.16)),
+      borderColor: kBorder,
+      borderWidth: 1,
+      dimmed: true,
+    );
+  }
+
+  /// Final page: clean end-of-document card instead of an empty preview.
+  Widget _endCard() {
+    return Container(
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: kBg2.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: kBorder, width: 1),
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.check_circle_outline,
+            size: 30, color: Colors.greenAccent),
+        const SizedBox(height: 8),
+        const Text('End of Document',
+            style: TextStyle(
+                color: kText, fontSize: 13, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 3),
+        Text('All $_totalPages pages presented',
+            style: const TextStyle(color: kMuted, fontSize: 10)),
+      ]),
+    );
+  }
+
+  Widget _badge({
+    required IconData icon,
+    required double iconSize,
+    required String label,
+    required Color fg,
+    required Color bg,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: fg.withOpacity(0.55), width: 1),
+        boxShadow: [
+          BoxShadow(
+              color: fg.withOpacity(0.35), blurRadius: 8, spreadRadius: 0.5),
+        ],
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: iconSize, color: fg),
+        const SizedBox(width: 5),
+        Text(label,
+            style: TextStyle(
+                color: fg,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.7)),
+      ]),
+    );
+  }
+
+  Widget _stageCard({
+    required int page,
+    required Uint8List? bytes,
+    required String loadingLabel,
+    required Widget badge,
+    required Color borderColor,
+    required double borderWidth,
+    bool interactive = false,
+    bool dimmed = false,
+    bool showPageChip = false,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: kBg2,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: borderWidth),
+        boxShadow: [
+          BoxShadow(
+              color: borderColor.withOpacity(interactive ? 0.28 : 0.10),
+              blurRadius: interactive ? 14 : 6,
+              offset: const Offset(0, 2)),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12.5),
+        child: Stack(fit: StackFit.expand, children: [
+          if (bytes != null)
+            Opacity(
+              opacity: dimmed ? 0.82 : 1,
+              child: interactive
+                  ? InteractiveViewer(
+                      maxScale: 4,
+                      child: Center(
+                          child: Image.memory(bytes,
+                              fit: BoxFit.contain,
+                              alignment: Alignment.center)))
+                  : Center(
+                      child: Image.memory(bytes,
+                          fit: BoxFit.contain, alignment: Alignment.center)),
+            )
+          else
+            Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child:
+                        CircularProgressIndicator(strokeWidth: 2, color: kAccent)),
+                const SizedBox(height: 10),
+                Text(loadingLabel,
+                    style: const TextStyle(color: kMuted, fontSize: 11),
+                    textAlign: TextAlign.center),
+              ]),
+            ),
+          Positioned(top: 8, left: 8, child: badge),
+          if (showPageChip)
+            Positioned(
+              bottom: 8,
+              right: 8,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.65),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text('Page $page',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ),
+        ]),
       ),
     );
   }

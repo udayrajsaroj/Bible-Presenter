@@ -209,7 +209,7 @@ class _SongDockCounter extends StatelessWidget {
       valueListenable: tvState,
       builder: (context, state, _) {
         final live = state.isNotEmpty && state['type'] == 'song';
-        return DockCounter(
+        return DockCounterPill(
           primary: position,
           secondary: live ? '● Live on TV' : 'Off air',
           accent: live ? Colors.green : kGold,

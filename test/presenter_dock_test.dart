@@ -46,6 +46,34 @@ void main() {
     expect(rectShort.bottom, rectTall.bottom);
   });
 
+  testWidgets('pill counter never collides with PREV/NEXT borders',
+      (tester) async {
+    final tv = ValueNotifier<Map<String, dynamic>>({'type': 'idle'});
+    tester.view.physicalSize = const Size(360, 700); // narrow phone
+    tester.view.devicePixelRatio = 1.0;
+    await tester.pumpWidget(_host(PresenterScaffold(
+      leading: const SizedBox(),
+      title: 'Test',
+      tvState: tv,
+      body: const SizedBox(),
+      dockLeft: DockNavButton(
+          label: 'PREV', icon: Icons.skip_previous, onTap: () {}),
+      dockCenter: const DockCounterPill(
+          primary: 'Page 100 / 200', secondary: 'tap to jump'),
+      dockRight: DockNavButton(
+          label: 'NEXT', icon: Icons.skip_next, onTap: () {}),
+    )));
+    await tester.pumpAndSettle();
+
+    final prev = tester.getRect(find.text('PREV'));
+    final pill = tester.getRect(find.text('Page 100 / 200'));
+    expect(pill.left, greaterThanOrEqualTo(prev.right + 4),
+        reason: 'counter pill must stay clear of the PREV button');
+    final next = tester.getRect(find.text('NEXT'));
+    expect(pill.right, lessThanOrEqualTo(next.left - 4),
+        reason: 'counter pill must stay clear of the NEXT button');
+  });
+
   testWidgets('LivePill follows TV state', (tester) async {
     final tv = ValueNotifier<Map<String, dynamic>>({'type': 'idle'});
     await tester.pumpWidget(_host(LivePill(tvState: tv)));

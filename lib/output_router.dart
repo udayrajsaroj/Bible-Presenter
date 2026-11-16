@@ -270,7 +270,14 @@ class OutputRouter {
     required int page,
     required BuildContext context,
   }) async {
-    final png = await _pdfPng(localPath, page);
+    Uint8List? png = await _pdfPng(localPath, page);
+    if (png == null && localPath != null && localPath.isNotEmpty) {
+      // The entry-page push used to fail silently when PdfPresenterScreen
+      // held the file descriptor at the same time (Kodi showed nothing until
+      // Next + Prev). One settle + retry makes the first push reliable.
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      png = await _pdfPng(localPath, page);
+    }
     if (png == null) return;
     final url = await SlideRenderer.publish(png);
     if (url == null) return;
@@ -287,7 +294,21 @@ class OutputRouter {
     if (png != null) _store('pdf:$localPath:$page', png);
   }
 
-  Future<Uint8List?> _pdfPng(String? localPath, int page) async {
+  /// Serializes phone-side pdfx renders. Android's PdfRenderer can fail when
+  /// two renders of the same path race (OutputRouter vs PdfPresenterScreen),
+  /// so every render waits for the previous one to finish.
+  Future<void> _pdfGate = Future.value();
+
+  Future<Uint8List?> _pdfPng(String? localPath, int page) {
+    final gate = _pdfGate;
+    final done = Completer<void>();
+    _pdfGate = done.future;
+    return gate.then((_) => _pdfPngLocked(localPath, page)).whenComplete(() {
+      done.complete();
+    });
+  }
+
+  Future<Uint8List?> _pdfPngLocked(String? localPath, int page) async {
     if (localPath == null || localPath.isEmpty) {
       // No local copy (files uploaded in an earlier session): Browser
       // Connect is the document path in that case.

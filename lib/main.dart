@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -86,6 +87,11 @@ class _ControllerPageState extends State<ControllerPage>
   bool _serverStarted = false;
   String _deviceIp = '...';
   Map<String, dynamic> _tvState = {'type': 'idle'};
+
+  // ── Collapsible chrome (scroll-driven + Focus Mode) ──
+  bool _chromeVisible = true;
+  bool _focusMode = false;
+  double _scrollHideAccum = 0;
 
   /// Mirror of _tvState for routes outside this widget's tree (the
   /// presenter screens listen to it so the LIVE pill stays current).
@@ -1706,6 +1712,11 @@ class _ControllerPageState extends State<ControllerPage>
         } catch (_) {}
       }
       _currentPdfLocalPath = localP;
+      // Sequencing note: the page-count probe below opens + closes the PDF
+      // BEFORE _emit('cast-pdf'), so the router's Page-1 render and the
+      // presenter screen's own open never overlap with this probe. The
+      // router serializes its own renders through _pdfGate and retries the
+      // entry page once — Kodi receives Page 1 immediately on entry.
       if (localP.isNotEmpty) {
         try {
           final doc = await pdfx.PdfDocument.openFile(localP);
@@ -2895,11 +2906,25 @@ class _ControllerPageState extends State<ControllerPage>
 
     return Scaffold(
       backgroundColor: kBg,
-      appBar: _buildAppBar(),
-      body: Column(children: [
-        _buildTabBar(),
-        Expanded(
-          child: TabBarView(
+      body: SafeArea(
+        bottom: false,
+        child: Stack(children: [
+          Column(children: [
+            // Top chrome (AppBar + TabBar) — collapses on scroll-down or
+            // Focus Mode, restores on scroll-up / tap (200ms ease).
+            ClipRect(
+              child: AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                child: _chromeVisible
+                    ? Column(children: [_buildAppBar(), _buildTabBar()])
+                    : _chromeStrip(showBottomHandle: false),
+              ),
+            ),
+            Expanded(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: _onScrollNotification,
+                child: TabBarView(
             controller: _tabController,
             children: [
               SlidesTab(
@@ -3059,12 +3084,136 @@ class _ControllerPageState extends State<ControllerPage>
               ),
             ],
           ),
-        ),
-        _dlnaBanner(),
-        _bottomUrlBar(),
-      ]),
+              ),
+            ),
+            // Bottom chrome (DLNA banner + URL bar) — collapses together
+            // with the top bars for a full-height content stage.
+            ClipRect(
+              child: AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                child: _chromeVisible
+                    ? Column(children: [_dlnaBanner(), _bottomUrlBar()])
+                    : _chromeStrip(showBottomHandle: true),
+              ),
+            ),
+          ]),
+          // Floating restore pill — the way back out of Focus Mode.
+          if (!_chromeVisible)
+            Positioned(top: 8, right: 10, child: _focusExitPill()),
+        ]),
+      ),
     );
   }
+
+  // ══════════════════ COLLAPSIBLE CHROME / FOCUS MODE ══════════════════
+
+  void _showChrome() {
+    if (mounted) {
+      setState(() {
+        _chromeVisible = true;
+        _focusMode = false;
+        _scrollHideAccum = 0;
+      });
+    }
+  }
+
+  void _hideChrome({bool focus = false}) {
+    if (mounted) {
+      setState(() {
+        _chromeVisible = false;
+        _focusMode = focus;
+        _scrollHideAccum = 0;
+      });
+    }
+  }
+
+  /// One-tap manual toggle from the bottom bar: locks the UI into a
+  /// distraction-free full-height workspace. Scroll-up restore is ignored
+  /// while locked; the floating CONTROLS pill exits.
+  void _toggleFocusMode() {
+    if (_chromeVisible) {
+      _hideChrome(focus: true);
+      _showSnack('Focus mode — tap CONTROLS to bring the bars back');
+    } else {
+      _showChrome();
+    }
+  }
+
+  /// Scroll-driven auto-hide: any vertical list (songs, Bible chapters,
+  /// slides, files) collapsing both bars when scrolling down and restoring
+  /// them when scrolling up. Threshold 48px avoids jitter on slow drags.
+  bool _onScrollNotification(ScrollNotification n) {
+    if (_focusMode) return false;
+    if (n.metrics.axis != Axis.vertical) return false;
+    if (n is UserScrollNotification) {
+      _scrollHideAccum = 0;
+      if (n.direction == ScrollDirection.reverse && _chromeVisible) {
+        _hideChrome();
+      } else if (n.direction == ScrollDirection.forward && !_chromeVisible) {
+        _showChrome();
+      }
+    } else if (n is ScrollUpdateNotification) {
+      _scrollHideAccum += n.scrollDelta ?? 0;
+      if (_scrollHideAccum > 48 && _chromeVisible) {
+        _hideChrome();
+      } else if (_scrollHideAccum < -48 && !_chromeVisible) {
+        _showChrome();
+      }
+    }
+    return false;
+  }
+
+  /// Thin tap strip shown in place of a hidden chrome group.
+  Widget _chromeStrip({required bool showBottomHandle}) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _showChrome,
+        child: Container(
+          height: 24,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: kBg2,
+            border: Border(
+                top: BorderSide(color: kBorder),
+                bottom: BorderSide(color: kBorder)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(showBottomHandle ? Icons.expand_less : Icons.expand_more,
+                size: 13, color: kMuted),
+            const SizedBox(width: 6),
+            const Text('TAP TO SHOW CONTROLS',
+                style: TextStyle(
+                    color: kMuted,
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2)),
+          ]),
+        ),
+      );
+
+  /// Floating pill (top-right) that restores the bars when hidden.
+  Widget _focusExitPill() => Material(
+        color: kBg2.withOpacity(0.94),
+        shape: StadiumBorder(
+            side: BorderSide(color: kAccent.withOpacity(0.5))),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: _showChrome,
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.center_focus_weak, size: 14, color: kAccent),
+              SizedBox(width: 6),
+              Text('CONTROLS',
+                  style: TextStyle(
+                      color: kText,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2)),
+            ]),
+          ),
+        ),
+      );
 
   /// Persistent connection surface above the URL bar (plan 9.1/9.3):
   /// connected chip, disconnect banner with one-tap reconnect, or the
@@ -3074,23 +3223,37 @@ class _ControllerPageState extends State<ControllerPage>
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        color: Colors.green.shade900.withOpacity(0.15),
+        color: Colors.green.withOpacity(0.18),
         child: Row(children: [
-          Icon(Icons.circle, size: 7, color: Colors.green.shade400),
-          const SizedBox(width: 7),
+          // Glowing greenAccent indicator — readable on any dark surface.
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: Colors.greenAccent,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.greenAccent.withOpacity(0.8),
+                    blurRadius: 6,
+                    spreadRadius: 1),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
           Expanded(
             flex: 4,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('TV Direct · ${_dlna.connectedName}',
-                  style: TextStyle(
-                      color: Colors.green.shade300,
+                  style: const TextStyle(
+                      color: Colors.white,
                       fontSize: 11,
-                      fontWeight: FontWeight.w600),
+                      fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis),
               Text(
                   'Slide changes take about a second on TV Direct — Browser Connect is instant',
                   style: TextStyle(
-                      color: Colors.green.shade600, fontSize: 8),
+                      color: Colors.greenAccent.shade100, fontSize: 9),
                   overflow: TextOverflow.ellipsis),
             ]),
           ),
@@ -3099,8 +3262,8 @@ class _ControllerPageState extends State<ControllerPage>
               await _dlna.disconnect();
               if (mounted) _showSnack('TV Direct disconnected');
             },
-            child: Icon(Icons.close,
-                size: 15, color: Colors.green.shade300),
+            child: const Icon(Icons.close,
+                size: 15, color: Colors.white70),
           ),
         ]),
       );
@@ -3109,13 +3272,16 @@ class _ControllerPageState extends State<ControllerPage>
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        color: Colors.red.shade900.withOpacity(0.2),
+        color: Colors.red.shade900.withOpacity(0.35),
         child: Row(children: [
-          Icon(Icons.wifi_off, size: 13, color: Colors.red.shade300),
+          const Icon(Icons.wifi_off, size: 13, color: Colors.white),
           const SizedBox(width: 7),
           const Expanded(
             child: Text('TV disconnected — check Wi-Fi or Reconnect',
-                style: TextStyle(color: Colors.red, fontSize: 11)),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold)),
           ),
           GestureDetector(
             onTap: _reconnectFromBanner,
@@ -3123,11 +3289,13 @@ class _ControllerPageState extends State<ControllerPage>
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                  color: Colors.red.shade800.withOpacity(0.25),
-                  borderRadius: BorderRadius.circular(100)),
+                  color: Colors.red.withOpacity(0.45),
+                  borderRadius: BorderRadius.circular(100),
+                  border: Border.all(
+                      color: Colors.redAccent.withOpacity(0.9), width: 1)),
               child: const Text('Reconnect',
                   style: TextStyle(
-                      color: Colors.red,
+                      color: Colors.white,
                       fontSize: 10,
                       fontWeight: FontWeight.bold)),
             ),
@@ -3141,20 +3309,20 @@ class _ControllerPageState extends State<ControllerPage>
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: Colors.green.shade900.withOpacity(0.12),
+          color: Colors.green.withOpacity(0.15),
           child: Row(children: [
-            Icon(Icons.history, size: 13, color: Colors.green.shade400),
+            const Icon(Icons.history, size: 13, color: Colors.greenAccent),
             const SizedBox(width: 7),
             Expanded(
               child: Text('Cast to $_reconnectName — tap to connect',
-                  style: TextStyle(
-                      color: Colors.green.shade300,
+                  style: const TextStyle(
+                      color: Colors.white,
                       fontSize: 11,
                       fontWeight: FontWeight.w600),
                   overflow: TextOverflow.ellipsis),
             ),
             const Icon(Icons.chevron_right,
-                size: 15, color: Colors.green),
+                size: 15, color: Colors.greenAccent),
           ]),
         ),
       );
@@ -3329,6 +3497,25 @@ class _ControllerPageState extends State<ControllerPage>
                         'http://${_deviceIp == '...' ? '' : _deviceIp}:${SlideRenderer.serverPort}/tv.html'),
                 const SizedBox(width: 8),
                 Expanded(child: _barBtn(Icons.copy, 'Copy URL', _copyUrl)),
+                const SizedBox(width: 8),
+                // Manual Focus Mode: full-height distraction-free stage.
+                Tooltip(
+                    message: 'Focus Mode — hide top & bottom bars',
+                    child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                            onTap: _toggleFocusMode,
+                            borderRadius: BorderRadius.circular(10),
+                            child: Ink(
+                                height: 42,
+                                width: 44,
+                                decoration: BoxDecoration(
+                                    color: kAccent.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                        color: kAccent.withValues(alpha: 0.4))),
+                                child: const Icon(Icons.center_focus_strong,
+                                    size: 18, color: kAccent))))),
               ]),
             ])),
       );

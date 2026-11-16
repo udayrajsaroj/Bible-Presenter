@@ -233,7 +233,17 @@ class PresenterDock extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Row(children: [
               Expanded(child: Align(alignment: Alignment.centerLeft, child: left ?? const SizedBox())),
-              SizedBox(width: 96, child: Center(child: center ?? const SizedBox())),
+              // Flexible center slot with a hard cap + scale-down pill: the
+              // counter shrinks to fit instead of starving the buttons or
+              // colliding with their borders on 360dp screens.
+              Flexible(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 132),
+                    child: center ?? const SizedBox(),
+                  ),
+                ),
+              ),
               Expanded(child: Align(alignment: Alignment.centerRight, child: right ?? const SizedBox())),
             ]),
           ),
@@ -278,8 +288,8 @@ class DockNavButton extends StatelessWidget {
           splashColor: fg.withOpacity(0.25),
           highlightColor: fg.withOpacity(0.10),
           child: Container(
-            constraints: const BoxConstraints(minHeight: 48, minWidth: 96),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 88),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
@@ -290,12 +300,18 @@ class DockNavButton extends StatelessWidget {
                 Icon(icon, size: 20, color: fg),
                 const SizedBox(width: 8),
               ],
-              Text(label,
-                  style: TextStyle(
-                      color: fg,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6)),
+              // Flexible label: shrinks instead of overflowing when the
+              // dock center pill leaves the button a narrow slot.
+              Flexible(
+                child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: fg,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6)),
+              ),
               if (!iconFirst) ...[
                 const SizedBox(width: 8),
                 Icon(icon, size: 20, color: fg),
@@ -334,6 +350,49 @@ class DockCounter extends StatelessWidget {
             textAlign: TextAlign.center,
             style: const TextStyle(color: kMuted, fontSize: 8.5, height: 1.4)),
     ]);
+  }
+}
+
+/// Capsule pill counter for the dock center slot. Sits inside a bordered
+/// capsule and uses FittedBox, so long counters ("Page 12 / 148") scale down
+/// instead of bleeding over the PREV/NEXT buttons on narrow screens.
+class DockCounterPill extends StatelessWidget {
+  final String primary;
+  final String? secondary;
+  final Color accent;
+  const DockCounterPill({super.key, required this.primary, this.secondary, this.accent = kGold});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: kBg.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: accent.withOpacity(0.45), width: 1),
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(primary,
+              maxLines: 1,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: accent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'monospace')),
+          if (secondary != null && secondary!.isNotEmpty)
+            Text(secondary!,
+                maxLines: 1,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: accent.withOpacity(0.65),
+                    fontSize: 8.5,
+                    height: 1.35)),
+        ]),
+      ),
+    );
   }
 }
 
