@@ -29,6 +29,8 @@ import 'widgets/schedule_detail_page.dart';
 import 'widgets/schedule_fullscreen.dart';
 import 'services/cast_service.dart';
 import 'services/bible_import.dart';
+import 'services/song_docx.dart';
+import 'widgets/song_slide_editor.dart';
 import 'services/cast_api.g.dart';
 import 'widgets/cast_button.dart';
 import 'state/bible_state.dart';
@@ -103,6 +105,7 @@ class _ControllerPageState extends State<ControllerPage>
   List<Map<String, dynamic>> _uploadedFiles = [];
   bool _isUploading = false;
   bool _importingBible = false;
+  bool _importingSongWord = false;
   int _pdfCurrentPage = 1;
   int _pdfTotalPages = 0;
   int _activeFileIndex = -1;
@@ -350,6 +353,99 @@ class _ControllerPageState extends State<ControllerPage>
     if (song['source'] != 'manual') return;
     songState.deleteSong(idx);
     _showSnack('Song deleted');
+  }
+
+  // ── Song Word import/export + slide editor ──
+  Future<void> _importSongWord() async {
+    if (_importingSongWord) return;
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['docx'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final bytes = result.files.single.bytes;
+      if (bytes == null) {
+        _showSnack('Could not read the file', error: true);
+        return;
+      }
+      setState(() => _importingSongWord = true);
+      final parsed = SongDocx.parseSongDocx(bytes);
+      final ok = await SongState.of(context)
+          .importSong(title: parsed.title, stanzas: parsed.stanzas);
+      if (mounted) {
+        setState(() => _importingSongWord = false);
+        if (ok) {
+          _showSnack('"${parsed.title}" imported — '
+              '${parsed.stanzas.length} slides!');
+        } else {
+          _showSnack('No song content found', error: true);
+        }
+      }
+    } on FormatException catch (e) {
+      if (mounted) {
+        setState(() => _importingSongWord = false);
+        _showSnack(e.message, error: true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _importingSongWord = false);
+        _showSnack('Import failed: $e', error: true);
+      }
+    }
+  }
+
+  Future<void> _exportSongWord() async {
+    final songState = SongState.of(context);
+    final song = songState.selectedSong;
+    if (song == null) return;
+    try {
+      final title = song['title'] as String? ?? 'Song';
+      final stanzas = List<String>.from(song['stanzas'] as List? ?? []);
+      final bytes = SongDocx.exportSongDocx(title, stanzas);
+      final safeName =
+          title.replaceAll(RegExp(r'[^\w\s-]'), '').trim().replaceAll(' ', '_');
+      final path = await FilePicker.platform.saveFile(
+        fileName: safeName.isEmpty ? 'song.docx' : '$safeName.docx',
+        bytes: Uint8List.fromList(bytes),
+      );
+      if (path != null) {
+        _showSnack('Exported "${song['title']}" (${stanzas.length} slides)');
+      }
+    } catch (e) {
+      _showSnack('Export failed: $e', error: true);
+    }
+  }
+
+  Future<void> _openSongSlideEditor() async {
+    final songState = SongState.of(context);
+    final song = songState.selectedSong;
+    if (song == null) return;
+    final result = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SongSlideEditorScreen(
+          title: song['title'] as String? ?? '',
+          stanzas: List<String>.from(song['stanzas'] as List? ?? []),
+          isManualSong: song['source'] == 'manual',
+          onPreviewSlide: (i, stanzas, title) {
+            _emit('cast-song', {
+              'title': title,
+              'stanzas': _stripStanzaLabels(stanzas),
+              'currentStanza': i,
+              'totalStanzas': stanzas.length,
+              'fontSize': BibleState.of(context).fontSize,
+              if (_bgUrl != null) 'background': {'url': _bgUrl}
+            });
+          },
+          onSave: (title, stanzas) => SongState.of(context).saveSongEdits(
+              song: song, newTitle: title, newStanzas: stanzas),
+        ),
+      ),
+    );
+    if (result == 'updated') _showSnack('Song updated');
+    if (result == 'copied') _showSnack('Saved as an editable copy');
   }
 
   // ══════════════════ SCHEDULE METHODS ══════════════════
@@ -2795,9 +2891,13 @@ class _ControllerPageState extends State<ControllerPage>
                     selectedSongIndex: songs.selectedSongIndex,
                     selectedStanzaIndex: songs.selectedStanzaIndex,
                     songSearchCtrl: songs.songSearchController,
+                    importingWord: _importingSongWord,
                     onFilterSongs: (query) => songs.songSearchQuery = query,
                     onShowAddSongModal: _showAddSongModal,
                     onShowCreateScheduleModal: _showCreateScheduleModal,
+                    onImportWord: _importSongWord,
+                    onExportWord: _exportSongWord,
+                    onEditSlides: _openSongSlideEditor,
                     onDeleteSong: _deleteSong,
                     onSelectSong: (i) => songs.selectedSongIndex = i,
                     onSelectStanza: (i) {

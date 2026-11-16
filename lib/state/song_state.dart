@@ -156,6 +156,75 @@ class SongState extends ChangeNotifier {
     await saveManualSongs();
   }
 
+  /// Adds a song imported from a Word document (or anywhere else) as a
+  /// manual song and selects it. Returns true when added.
+  Future<bool> importSong({
+    required String title,
+    required List<String> stanzas,
+  }) async {
+    final cleanTitle = title.trim();
+    final cleanStanzas =
+        stanzas.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    if (cleanTitle.isEmpty || cleanStanzas.isEmpty) return false;
+    _allSongs.insert(0, {
+      'title': cleanTitle,
+      'stanzas': cleanStanzas,
+      'source': 'manual'
+    });
+    _songSearchQuery = '';
+    _filteredSongs = List.from(_allSongs);
+    _selectedSongIndex = 0;
+    _selectedStanzaIndex = 0;
+    await _saveManualSongs();
+    notifyListeners();
+    return true;
+  }
+
+  /// Persists edits made in the slide editor. Manual songs update in place;
+  /// asset songs stay untouched and an editable manual copy is created.
+  /// Returns the source ('updated' | 'copied'), or null when nothing changed.
+  Future<String?> saveSongEdits({
+    required Map<String, dynamic> song,
+    required String newTitle,
+    required List<String> newStanzas,
+  }) async {
+    final cleanTitle = newTitle.trim();
+    final cleanStanzas =
+        newStanzas.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    if (cleanTitle.isEmpty || cleanStanzas.isEmpty) return null;
+    final idx = _allSongs.indexOf(song);
+    if (idx >= 0 && song['source'] == 'manual') {
+      _allSongs[idx] = {
+        'title': cleanTitle,
+        'stanzas': cleanStanzas,
+        'source': 'manual'
+      };
+      await _saveManualSongs();
+      _refreshAfterEdit(cleanTitle);
+      notifyListeners();
+      return 'updated';
+    }
+    // Asset song — keep the original, add an editable copy.
+    _allSongs.insert(0, {
+      'title': cleanTitle,
+      'stanzas': cleanStanzas,
+      'source': 'manual'
+    });
+    await _saveManualSongs();
+    _refreshAfterEdit(cleanTitle);
+    notifyListeners();
+    return 'copied';
+  }
+
+  /// Re-applies the search filter after an edit and keeps the edited song
+  /// selected (matched by title in the refreshed list).
+  void _refreshAfterEdit(String title) {
+    _filterSongs();
+    final idx = _filteredSongs.indexWhere((s) => s['title'] == title);
+    if (idx >= 0) _selectedSongIndex = idx;
+    _selectedStanzaIndex = 0;
+  }
+
   void addManualSong() {
     final title = _songTitleController.text.trim();
     if (title.isEmpty) return;
