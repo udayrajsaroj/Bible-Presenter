@@ -29,6 +29,9 @@ import 'widgets/schedule_detail_page.dart';
 import 'widgets/schedule_fullscreen.dart';
 import 'services/cast_service.dart';
 import 'services/bible_import.dart';
+import 'screens/bible_presenter_screen.dart';
+import 'screens/pdf_presenter_screen.dart';
+import 'screens/song_presenter_screen.dart';
 import 'services/song_docx.dart';
 import 'widgets/song_slide_editor.dart';
 import 'services/cast_api.g.dart';
@@ -83,6 +86,16 @@ class _ControllerPageState extends State<ControllerPage>
   bool _serverStarted = false;
   String _deviceIp = '...';
   Map<String, dynamic> _tvState = {'type': 'idle'};
+
+  /// Mirror of _tvState for routes outside this widget's tree (the
+  /// presenter screens listen to it so the LIVE pill stays current).
+  final ValueNotifier<Map<String, dynamic>> tvStateN =
+      ValueNotifier({'type': 'idle'});
+
+  void _setTvState(Map<String, dynamic> s) {
+    _tvState = s;
+    tvStateN.value = s;
+  }
 
   // ── WS reconnection ──
   Timer? _reconnectTimer;
@@ -1285,7 +1298,7 @@ class _ControllerPageState extends State<ControllerPage>
             if (data is Map && data['type'] != null) {
               if (mounted) {
                 setState(() {
-                  _tvState = Map<String, dynamic>.from(data);
+                  _setTvState(Map<String, dynamic>.from(data));
                   _connected = true;
                   if (data['type'] == 'pdf' && data['content'] != null) {
                     final content = data['content'] as Map<String, dynamic>;
@@ -1353,20 +1366,20 @@ class _ControllerPageState extends State<ControllerPage>
         case 'cast-logo':
         case 'cast-pdf':
         case 'cast-pptx':
-          _tvState = {
+          _setTvState({
             'type': event.substring(5),
             'content': data,
             'fontSize': data['fontSize'] ?? _tvState['fontSize'] ?? 44,
             'background': data['background'] ?? _tvState['background'],
-          };
+          });
           break;
         case 'cast-welcome':
-          _tvState = {
+          _setTvState({
             'type': 'welcome',
             'content': data,
             'fontSize': _tvState['fontSize'] ?? 44,
             'background': null,
-          };
+          });
           break;
         case 'pdf-page':
           if (_tvState['type'] == 'pdf' || _tvState['type'] == 'pptx') {
@@ -1376,23 +1389,31 @@ class _ControllerPageState extends State<ControllerPage>
             if ((data['totalPages'] ?? 0) > 0) {
               c['totalPages'] = data['totalPages'];
             }
-            _tvState = {..._tvState, 'content': c};
+            _setTvState({..._tvState, 'content': c});
           }
           break;
         case 'cast-video':
-          _tvState = {
+          _setTvState({
             'type': 'video',
             'content': data,
             'fontSize': _tvState['fontSize'] ?? 44,
             'background': _tvState['background'],
-          };
+          });
           break;
         case 'update-background':
-          _tvState = {..._tvState, 'background': data.isEmpty ? null : data};
+          _setTvState({..._tvState, 'background': data.isEmpty ? null : data});
+          break;
+        case 'cast-blackout':
+          _setTvState({
+            'type': 'blackout',
+            'content': null,
+            'fontSize': _tvState['fontSize'] ?? 44,
+            'background': null,
+          });
           break;
         case 'clear-screen':
         case 'video-stop':
-          _tvState = {'type': 'idle'};
+          _setTvState({'type': 'idle'});
           break;
       }
     });
@@ -1440,6 +1461,10 @@ class _ControllerPageState extends State<ControllerPage>
     _currentlyCastUrl = '';
     setState(() => _activeFileIndex = -1);
     _emit('clear-screen', {});
+  }
+
+  void _castBlackout() {
+    _emit('cast-blackout', {});
   }
 
   void _addSlide() {
@@ -1949,6 +1974,19 @@ class _ControllerPageState extends State<ControllerPage>
     _preRenderNext();
   }
 
+  /// Direct jump used by the PDF presenter's thumbnail grid.
+  void _pdfGoToPage(int page) {
+    if (page < 1) return;
+    if (_pdfTotalPages > 0 && page > _pdfTotalPages) return;
+    _pdfCurrentPage = page;
+    _emit('pdf-page', {
+      'page': _pdfCurrentPage,
+      '_localPdfPath': _currentPdfLocalPath
+    });
+    setState(() {});
+    _preRenderNext();
+  }
+
   Future<void> _deleteUploadedFile(int idx) async {
     final fileName = _uploadedFiles[idx]['name'] as String? ?? '';
     final confirmed = await _confirmDelete(fileName);
@@ -2135,303 +2173,79 @@ class _ControllerPageState extends State<ControllerPage>
     ));
   }
 
-  void _openBibleFullscreen() {
-    final bibleState = BibleState.of(context);
-    Navigator.of(context).push(PageRouteBuilder(
-      opaque: false,
-      barrierDismissible: false,
-      pageBuilder: (_, __, ___) => SectionFullscreen(
-        sectionTitle: 'BIBLE',
-        sectionIcon: Icons.menu_book,
-        sectionColor: kGold,
-        bgImageUrl: _bgUrl,
-        tvState: _tvState,
-        onBlackout: _clearScreen,
-        onWelcome: _castWelcome,
+  // ══════════════════ PRESENTER SCREENS (live stage) ══════════════════
+  // Dedicated, distraction-free live screens. The dock is pinned at a fixed
+  // height so Prev/Next never shift (see widgets/presenter_shell.dart).
+
+  void _openBiblePresenter() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => BiblePresenterScreen(
+        bibleState: BibleState.of(context),
+        tvState: tvStateN,
+        onCastVerse: _castVerse,
+        onPrevVerse: _prevVerse,
+        onNextVerse: _nextVerse,
         onLogo: _castLogo,
-        onExit: () => Navigator.pop(context),
-        contentBuilder: () {
-          final v = bibleState.bible[bibleState.selectedBook]
-              ?[bibleState.selectedChapter]?[bibleState.selectedVerse];
-          final primary = v?['primary'] ?? '';
-          final secondary = v?['secondary'] ?? '';
-          final ref =
-              '${bibleState.selectedBook} ${bibleState.selectedChapter}:${bibleState.selectedVerse}';
-          return Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(ref,
-                style: const TextStyle(
-                    color: kAccent,
-                    fontSize: 16,
-                    fontFamily: 'monospace',
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            if (primary.isNotEmpty)
-              Text(primary,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: (BibleState.of(context).fontSize * 0.85)
-                          .clamp(18, 50)
-                          .toDouble(),
-                      height: 1.8,
-                      fontWeight: FontWeight.w600,
-                      shadows: [
-                        Shadow(
-                            color: Colors.black.withValues(alpha: 0.9),
-                            blurRadius: 20)
-                      ])),
-            if (primary.isNotEmpty && secondary.isNotEmpty)
-              const SizedBox(height: 12),
-            if (secondary.isNotEmpty)
-              Text('"$secondary"',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: (BibleState.of(context).fontSize * 0.65)
-                          .clamp(14, 35)
-                          .toDouble(),
-                      height: 1.8,
-                      fontStyle: FontStyle.italic,
-                      shadows: [
-                        Shadow(
-                            color: Colors.black.withValues(alpha: 0.9),
-                            blurRadius: 20)
-                      ])),
-          ]);
-        },
-        controlsBuilder: (refresh) => [
-          Text(
-              '${bibleState.selectedBook} ${bibleState.selectedChapter}:${bibleState.selectedVerse}',
-              style: const TextStyle(
-                  color: Colors.white38,
-                  fontSize: 12,
-                  fontFamily: 'monospace')),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(
-                child: fsNavBtn(
-                    icon: Icons.skip_previous,
-                    label: 'Prev',
-                    iconFirst: true,
-                    onTap: () {
-                      _prevVerse();
-                      refresh();
-                    })),
-            const SizedBox(width: 10),
-            Expanded(
-                flex: 2,
-                child: fsCastBtn(
-                    label: 'Cast',
-                    gradient: const [kGold, Color(0xFFD97706)],
-                    onTap: () {
-                      _castVerse();
-                      refresh();
-                    })),
-            const SizedBox(width: 10),
-            Expanded(
-                child: fsNavBtn(
-                    icon: Icons.skip_next,
-                    label: 'Next',
-                    iconFirst: false,
-                    onTap: () {
-                      _nextVerse();
-                      refresh();
-                    })),
-          ]),
-        ],
+        onBlackout: _castBlackout,
       ),
     ));
   }
 
-  void _openSongsFullscreen() {
+  void _openSongPresenter({int? index}) {
     final songState = SongState.of(context);
+    if (index != null) {
+      songState.selectedSongIndex = index;
+    }
     if (songState.selectedSongIndex < 0 ||
         songState.selectedSongIndex >= songState.filteredSongs.length) {
       _showSnack('Select a song first!', error: true);
       return;
     }
-    Navigator.of(context).push(PageRouteBuilder(
-      opaque: false,
-      barrierDismissible: false,
-      pageBuilder: (_, __, ___) => SectionFullscreen(
-        sectionTitle: 'SONGS',
-        sectionIcon: Icons.music_note,
-        sectionColor: Colors.purple,
-        bgImageUrl: _bgUrl,
-        tvState: _tvState,
-        onBlackout: _clearScreen,
-        onWelcome: _castWelcome,
+    _castSong();
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => SongPresenterScreen(
+        songState: songState,
+        tvState: tvStateN,
+        onSelectStanza: (i) {
+          songState.selectedStanzaIndex = i;
+          _castSong();
+        },
+        onPrevStanza: _prevStanza,
+        onNextStanza: _nextStanza,
         onLogo: _castLogo,
-        onExit: () => Navigator.pop(context),
-        contentBuilder: () {
-          final song = songState.filteredSongs[songState.selectedSongIndex];
-          final stanzas = song['stanzas'] as List<String>? ?? [];
-          final currentStanza = songState.selectedStanzaIndex < stanzas.length
-              ? stanzas[songState.selectedStanzaIndex]
-              : '';
-          return Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(song['title'] as String? ?? '',
-                style: const TextStyle(
-                    color: kGold,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5),
-                textAlign: TextAlign.center),
-            const SizedBox(height: 4),
-            Text(
-                'Stanza ${songState.selectedStanzaIndex + 1} / ${stanzas.length}',
-                style: const TextStyle(
-                    color: Colors.white38,
-                    fontSize: 11,
-                    fontFamily: 'monospace')),
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.04),
-                  borderRadius: BorderRadius.circular(16),
-                  border:
-                      Border.all(color: Colors.white.withValues(alpha: 0.08))),
-              child: Text(currentStanza.isEmpty ? 'No content' : currentStanza,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: (BibleState.of(context).fontSize * 0.55)
-                          .clamp(14, 22)
-                          .toDouble(),
-                      height: 1.8,
-                      fontWeight: FontWeight.w400)),
-            ),
-          ]);
-        },
-        controlsBuilder: (refresh) {
-          final stanzas = songState.filteredSongs[songState.selectedSongIndex]
-                  ['stanzas'] as List<String>? ??
-              [];
-          return [
-            Text(
-                '${songState.filteredSongs[songState.selectedSongIndex]['title'] ?? ''}  •  Stanza ${songState.selectedStanzaIndex + 1}/${stanzas.length}',
-                style: const TextStyle(
-                    color: Colors.white38,
-                    fontSize: 12,
-                    fontFamily: 'monospace'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(
-                  child: fsNavBtn(
-                      icon: Icons.skip_previous,
-                      label: 'Prev',
-                      iconFirst: true,
-                      onTap: songState.selectedStanzaIndex > 0
-                          ? () {
-                              _prevStanza();
-                              refresh();
-                            }
-                          : null)),
-              const SizedBox(width: 10),
-              Expanded(
-                  flex: 2,
-                  child: fsCastBtn(
-                      label: 'Cast to TV',
-                      gradient: const [Colors.purple, Color(0xFF7C3AED)],
-                      onTap: () {
-                        _castSong();
-                        refresh();
-                      })),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: fsNavBtn(
-                      icon: Icons.skip_next,
-                      label: 'Next',
-                      iconFirst: false,
-                      onTap: songState.selectedStanzaIndex < stanzas.length - 1
-                          ? () {
-                              _nextStanza();
-                              refresh();
-                            }
-                          : null)),
-            ]),
-          ];
-        },
+        onBlackout: _castBlackout,
+        onClear: _clearScreen,
       ),
     ));
   }
 
-  void _openFilesFullscreen() {
-    if (_tvState['type'] != 'pdf' && _tvState['type'] != 'pptx') {
-      _showSnack('Cast a file first!', error: true);
+  void _openPdfPresenter() {
+    if (_tvState['type'] != 'pdf') {
+      _showSnack('Cast a PDF first — then control it live here!', error: true);
       return;
     }
-    Navigator.of(context).push(PageRouteBuilder(
-      opaque: false,
-      barrierDismissible: false,
-      pageBuilder: (_, __, ___) => SectionFullscreen(
-        sectionTitle: _tvState['type'] == 'pdf' ? 'PDF' : 'PPT',
-        sectionIcon:
-            _tvState['type'] == 'pdf' ? Icons.picture_as_pdf : Icons.slideshow,
-        sectionColor: _tvState['type'] == 'pdf' ? Colors.red : Colors.orange,
-        bgImageUrl: null,
-        tvState: _tvState,
-        onBlackout: _clearScreen,
-        onWelcome: _castWelcome,
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => PdfPresenterScreen(
+        fileName: (_tvState['content'] as Map?)?['name'] as String? ??
+            'Document',
+        localPath: _currentPdfLocalPath.isEmpty
+            ? null
+            : _currentPdfLocalPath,
+        initialPage: _pdfCurrentPage,
+        reportedTotalPages: _pdfTotalPages,
+        tvState: tvStateN,
+        onGoToPage: _pdfGoToPage,
         onLogo: _castLogo,
-        onExit: () => Navigator.pop(context),
-        contentBuilder: () => Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(
-              _tvState['type'] == 'pdf'
-                  ? Icons.picture_as_pdf
-                  : Icons.slideshow,
-              size: 64,
-              color: _tvState['type'] == 'pdf'
-                  ? Colors.red.shade400
-                  : Colors.orange.shade400),
-          const SizedBox(height: 16),
-          Text(
-              'Page $_pdfCurrentPage ${_pdfTotalPages > 0 ? "/ $_pdfTotalPages" : ""}',
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace')),
-          const SizedBox(height: 8),
-          const Text('Control from phone or TV browser',
-              style: TextStyle(color: Colors.white38, fontSize: 12)),
-        ]),
-        controlsBuilder: (refresh) => _tvState['type'] == 'pdf'
-            ? [
-                Row(children: [
-                  Expanded(
-                      child: fsNavBtn(
-                          icon: Icons.navigate_before,
-                          label: 'Prev Page',
-                          iconFirst: true,
-                          onTap: _pdfCurrentPage > 1
-                              ? () {
-                                  _pdfPrevPage();
-                                  refresh();
-                                }
-                              : null)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                      child: fsNavBtn(
-                          icon: Icons.navigate_next,
-                          label: 'Next Page',
-                          iconFirst: false,
-                          onTap: (_pdfTotalPages > 0 &&
-                                  _pdfCurrentPage >= _pdfTotalPages)
-                              ? null
-                              : () {
-                                  _pdfNextPage();
-                                  refresh();
-                                })),
-                ]),
-              ]
-            : const [],
+        onBlackout: _castBlackout,
       ),
     ));
+  }
+
+  /// Casts a picked file; PDFs additionally open the live presenter screen.
+  void _castFileAndPresent(int idx) {
+    final isPdf = (_uploadedFiles[idx]['type'] as String? ?? '') == 'pdf';
+    _castFile(idx);
+    if (isPdf) _openPdfPresenter();
   }
 
   // ══════════════════ SCHEDULE DETAIL OPENER ══════════════════
@@ -3105,11 +2919,11 @@ class _ControllerPageState extends State<ControllerPage>
                     onPrimaryLangChanged: (val) => bible.primaryLang = val,
                     onSecondaryLangChanged: (val) => bible.secondaryLang = val,
                     onImportLanguage: _importBibleLanguage,
-                    onCastVerse: _castVerse,
+                    onCastVerse: _openBiblePresenter,
                     onPrevVerse: _prevVerse,
                     onNextVerse: _nextVerse,
                     onFontSizeChanged: (v) => bible.fontSize = v,
-                    onOpenFullscreen: _openBibleFullscreen),
+                    onOpenFullscreen: _openBiblePresenter),
               ),
               Consumer2<SongState, ScheduleState>(
                 builder: (context, songs, schedules, _) => SongsTab(
@@ -3128,15 +2942,15 @@ class _ControllerPageState extends State<ControllerPage>
                     onExportWord: _exportSongWord,
                     onEditSlides: _openSongSlideEditor,
                     onDeleteSong: _deleteSong,
-                    onSelectSong: (i) => songs.selectedSongIndex = i,
+                    onSelectSong: (i) => _openSongPresenter(index: i),
                     onSelectStanza: (i) {
                       songs.selectedStanzaIndex = i;
                       _castSong();
                     },
-                    onCastSong: _castSong,
+                    onCastSong: _openSongPresenter,
                     onPrevStanza: _prevStanza,
                     onNextStanza: _nextStanza,
-                    onOpenFullscreen: _openSongsFullscreen,
+                    onOpenFullscreen: _openSongPresenter,
                     schedules: schedules.schedules,
                     scheduleMode: schedules.scheduleMode,
                     activeScheduleIndex: schedules.activeScheduleIndex,
@@ -3152,11 +2966,11 @@ class _ControllerPageState extends State<ControllerPage>
                   pdfCurrentPage: _pdfCurrentPage,
                   pdfTotalPages: _pdfTotalPages,
                   onPickAndUploadFile: _pickAndUploadFile,
-                  onCastFile: _castFile,
+                  onCastFile: _castFileAndPresent,
                   onDeleteFile: _deleteUploadedFile,
                   onPdfPrevPage: _pdfPrevPage,
                   onPdfNextPage: _pdfNextPage,
-                  onOpenFullscreen: _openFilesFullscreen,
+                  onOpenFullscreen: _openPdfPresenter,
                   onPdfTotalPagesKnown: (t) {
                     if (mounted && _pdfTotalPages != t) {
                       setState(() => _pdfTotalPages = t);

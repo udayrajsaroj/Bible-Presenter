@@ -379,6 +379,12 @@ const String tvHtmlContent = r'''
       display: flex; flex-direction: column;
       align-items: center; gap: 24px;
     }
+
+    /* ── Blackout (presenter emergency dark screen) ── */
+    #blackout-screen {
+      position: fixed; inset: 0;
+      background: #000;
+    }
     .idle-cross {
       width: 64px; height: 64px;
       position: relative;
@@ -1027,7 +1033,7 @@ const String tvHtmlContent = r'''
   function updateMobileNav() {
     const nav = document.getElementById('mobile-nav');
     const navInfo = document.getElementById('nav-info');
-    if (!isMobile() || state.type === 'idle' || state.type === 'logo' || state.type === 'welcome') {
+    if (!isMobile() || state.type === 'idle' || state.type === 'logo' || state.type === 'welcome' || state.type === 'blackout') {
       nav.classList.remove('visible');
       return;
     }
@@ -1294,6 +1300,12 @@ const String tvHtmlContent = r'''
           <div class="idle-cross"></div>
           <p class="idle-label">BiblePresenter</p>
         </div>`;
+
+    } else if (state.type === 'blackout') {
+      closeDocViewer();
+      hideVideo();
+      hideYouTube();
+      stage.innerHTML = `<div id="blackout-screen"></div>`;
 
     } else if (state.type === 'video') {
       closeDocViewer();

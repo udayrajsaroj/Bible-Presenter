@@ -481,6 +481,16 @@ Future<void> startServer(dynamic message) async {
               _broadcast(_currentState);
               break;
 
+            case 'cast-blackout':
+              _currentState = {
+                'type': 'blackout',
+                'content': null,
+                'fontSize': _currentState['fontSize'] ?? 44,
+                'background': null,
+              };
+              _broadcast(_currentState);
+              break;
+
             // ── Feature 2: local video (V1) ──
             // Phone commands are forwarded raw as {event, data} (the TV page
             // dispatches on `event`) while _currentState keeps a parallel
