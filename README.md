@@ -33,6 +33,10 @@ BiblePresenter turns your Android phone into a church presentation controller. I
 - **Slide editor** — PowerPoint-style full screen: drag ⠿ to reorder slides,
   duplicate a slide, edit slide text, preview any edited slide on the TV
   before saving; asset songs save as editable copies, manual songs save in place
+- **Presenter screens** — dedicated distraction-free live stage for Songs,
+  Bible and PDF, each with a fixed-height pinned bottom dock (Prev/Next
+  buttons never move regardless of content length), LIVE ON TV / OFF AIR
+  pill, emergency Logo / Blackout / Clear actions, and swipe gestures
 
 ### 📂 Files (PDF / PPT)
 - Upload PDF and PPT/PPTX files from phone

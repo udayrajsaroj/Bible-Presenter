@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
@@ -59,6 +60,10 @@ class OutputRouter {
       case 'cast-logo':
         await _renderAndPush(
             _stateFor(event, data, currentState), context);
+        break;
+
+      case 'cast-blackout':
+        await _renderBlackout(context);
         break;
 
       case 'cast-welcome':
@@ -198,6 +203,29 @@ class OutputRouter {
     final url = await SlideRenderer.publish(png);
     if (url == null) return;
     await DlnaService.instance.castImage(url);
+  }
+
+  /// Blackout on a DLNA TV: render a solid full-HD black PNG and publish it
+  /// as a still image — the renderer shows black until the next cast or stop.
+  Future<void> _renderBlackout(BuildContext context) async {
+    try {
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      canvas.drawPaint(ui.Paint()..color = const ui.Color(0xFF000000));
+      final picture = recorder.endRecording();
+      final img = await picture.toImage(1920, 1080);
+      final byteData =
+          await img.toByteData(format: ui.ImageByteFormat.png);
+      picture.dispose();
+      img.dispose();
+      final png = byteData?.buffer.asUint8List();
+      if (png == null) return;
+      final url = await SlideRenderer.publish(png);
+      if (url == null) return;
+      await DlnaService.instance.castImage(url, title: 'Blackout');
+    } catch (_) {
+      // Blackout is best-effort; the phone UI still shows OFF AIR state.
+    }
   }
 
   /// Pre-renders the likely next state (next verse, next slide, next stanza,
