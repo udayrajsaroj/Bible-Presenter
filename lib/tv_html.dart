@@ -1339,9 +1339,9 @@ const String tvHtmlContent = r'''
       stage.innerHTML = `
         <div class="verse-container fade-in" style="max-width:${maxW};width:100%">
           ${hasHi ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:${hasEn?'12px':'20px'}">${c.textHi}</p>` : ''}
+          ${hasHi && hasEn ? `<div class="ornament">&#10022;</div>` : ''}
           ${hasEn ? `<p class="verse-en" style="font-size:${enPx};${enStyle}margin-bottom:16px">${c.textEn}</p>` : ''}
           ${!hasHi && c.text ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:16px">"${c.text}"</p>` : ''}
-          ${hasHi && hasEn ? `<div class="ornament">&#10022;</div>` : ''}
           <p class="verse-ref">${c.book || ''} ${c.chapter || ''}:${c.verse || ''}</p>
         </div>`;
 
