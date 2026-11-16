@@ -279,18 +279,20 @@ class SettingsTab extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: bgUrl == bg['id'] ? Colors.purple : kBorder, width: bgUrl == bg['id'] ? 2 : 1),
-                    gradient: bg['id'] == 'animated:aurora' ? const LinearGradient(colors: [Color(0xFF0a0a2e), Color(0xFF1a0a3e), Color(0xFF0a2a4e)])
-                      : bg['id'] == 'animated:divine' ? const LinearGradient(colors: [Color(0xFF1a1a0a), Color(0xFF0a0a0f)])
-                      : bg['id'] == 'animated:sunset' ? const LinearGradient(colors: [Color(0xFF1a0a0a), Color(0xFF2a1a0a), Color(0xFF0a0a2a)])
-                      : bg['id'] == 'animated:ocean' ? const LinearGradient(colors: [Color(0xFF0a1a2a), Color(0xFF0a2a3a)])
-                      : const LinearGradient(colors: [Color(0xFF0a0a0a), Color(0xFF1a0a0a)]),
+                    border: Border.all(color: bgUrl == bg['id'] ? kAccent : kBorder, width: bgUrl == bg['id'] ? 2 : 1),
+                    gradient: bg['id'] == 'animated:aurora' ? const LinearGradient(colors: [Color(0xFF03030c), Color(0xFF080d24), Color(0xFF150d30)])
+                      : bg['id'] == 'animated:divine' ? const LinearGradient(colors: [Color(0xFF14120a), Color(0xFF080704), Color(0xFF030302)])
+                      : bg['id'] == 'animated:ocean' ? const LinearGradient(colors: [Color(0xFF020914), Color(0xFF031a2e), Color(0xFF010408)])
+                      : bg['id'] == 'animated:fire' ? const LinearGradient(colors: [Color(0xFF060202), Color(0xFF160604), Color(0xFF030101)])
+                      : const LinearGradient(colors: [Color(0xFF06020c), Color(0xFF1c0533), Color(0xFF28041a)]),
                   ),
                   alignment: Alignment.bottomLeft,
                   padding: const EdgeInsets.all(8),
                   child: Row(children: [
+                    const Icon(Icons.motion_photos_on_outlined, size: 11, color: kAccent),
+                    const SizedBox(width: 4),
                     Expanded(child: Text(bg['name']!, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white))),
-                    if (bgUrl == bg['id']) const Icon(Icons.check_circle, size: 12, color: Colors.purple),
+                    if (bgUrl == bg['id']) const Icon(Icons.check_circle, size: 12, color: kAccent),
                   ]),
                 ),
               )),

@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import '../theme.dart';
 import '../widgets/shared_widgets.dart';
+import '../widgets/pdf_page_preview.dart';
 
 class FilesTab extends StatelessWidget {
   final List<Map<String, dynamic>> uploadedFiles;
@@ -20,6 +21,7 @@ class FilesTab extends StatelessWidget {
   final VoidCallback onPdfPrevPage;
   final VoidCallback onPdfNextPage;
   final VoidCallback onOpenFullscreen;
+  final void Function(int totalPages)? onPdfTotalPagesKnown;
   // ── Video remote (Feature 2) ──
   final double videoPosition;
   final double videoDuration;
@@ -59,6 +61,7 @@ class FilesTab extends StatelessWidget {
     required this.onPdfPrevPage,
     required this.onPdfNextPage,
     required this.onOpenFullscreen,
+    this.onPdfTotalPagesKnown,
     required this.videoPosition,
     required this.videoDuration,
     required this.videoPlaying,
@@ -186,6 +189,38 @@ class FilesTab extends StatelessWidget {
         if (tvState['type'] == 'pdf') appCard(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           label('PDF PAGE CONTROL'),
           const SizedBox(height: 10),
+          Builder(builder: (_) {
+            Map<String, dynamic>? activeFile;
+            if (activeFileIndex >= 0 && activeFileIndex < uploadedFiles.length) {
+              activeFile = uploadedFiles[activeFileIndex];
+            }
+            if (activeFile == null) {
+              final activeUrl = tvState['content']?['url'] as String? ?? '';
+              final activeName = tvState['content']?['name'] as String? ?? '';
+              for (final f in uploadedFiles) {
+                if ((activeUrl.isNotEmpty && f['url'] == activeUrl) ||
+                    (activeName.isNotEmpty && f['name'] == activeName)) {
+                  activeFile = f;
+                  break;
+                }
+              }
+            }
+            final activeLocalPath = (activeFile?['localPath'] as String? ?? '').isNotEmpty
+                ? (activeFile?['localPath'] as String)
+                : (tvState['content']?['_localPdfPath'] as String? ?? '');
+            if (activeLocalPath.isNotEmpty) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: PdfPagePreview(
+                  localPath: activeLocalPath,
+                  currentPage: pdfCurrentPage,
+                  totalPages: pdfTotalPages,
+                  onTotalPagesKnown: onPdfTotalPagesKnown,
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          }),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -516,16 +551,28 @@ class FilesTab extends StatelessWidget {
             ...uploadedFiles.asMap().entries.map((entry) {
               final idx = entry.key;
               final f = entry.value;
-              final isActive = idx == activeFileIndex && tvState['type'] != 'idle';
               final fileType = f['type'] as String? ?? 'other';
               final fileName = f['name'] as String? ?? 'Unknown';
               final fileSize = f['size'] as int? ?? 0;
-              final localPath = f['localPath'] as String? ?? '';
               final isPdf = fileType == 'pdf';
               final isVideo = fileType == 'video';
               final ext = fileName.split('.').last.toUpperCase();
 
+              final isPdfCast = isPdf && tvState['type'] == 'pdf';
+              final isVideoCast = isVideo && tvState['type'] == 'video';
+              final isPptxCast = fileType == 'pptx' && tvState['type'] == 'pptx';
+              final isCastMatch = (isPdfCast || isVideoCast || isPptxCast) &&
+                  ((tvState['content']?['url'] != null && tvState['content']?['url'] == f['url']) ||
+                   (tvState['content']?['name'] != null && tvState['content']?['name'] == fileName) ||
+                   idx == activeFileIndex);
+              final isFileActiveOnTv = (isPdfCast || isVideoCast || isPptxCast) && isCastMatch;
+
               String castLabel() {
+                if (isFileActiveOnTv) {
+                  if (isPdf) return 'Re-cast PDF (Page 1)';
+                  if (isVideo) return 'Restart Video';
+                  return 'Re-cast PPT to TV';
+                }
                 if (isPdf) return 'Cast PDF to TV';
                 if (isVideo) return 'Cast Video to TV';
                 return 'Cast PPT to TV';
@@ -535,34 +582,87 @@ class FilesTab extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: isActive ? const Color(0xFF0c1f3a) : kBg,
+                  color: isFileActiveOnTv ? const Color(0xFF0c1f3a) : kBg,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: isActive ? kAccent.withOpacity(0.7) : kBorder),
+                  border: Border.all(
+                    color: isFileActiveOnTv ? kAccent.withOpacity(0.7) : kBorder,
+                    width: isFileActiveOnTv ? 1.5 : 1,
+                  ),
                 ),
                 child: Column(children: [
                   Row(children: [
-                    _buildFilePreview(f, isActive),
+                    GestureDetector(
+                      onTap: () => onCastFile(idx),
+                      child: _buildFilePreview(f, isFileActiveOnTv),
+                    ),
                     const SizedBox(width: 10),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(fileName, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isActive ? kText : kMuted), overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 2),
-                      Row(children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: fileColor(fileType).withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
-                          child: Text(isPdf ? 'PDF' : (isVideo ? ext : 'PPT'), style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: fileColor(fileType), letterSpacing: 0.5)),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(formatFileSize(fileSize), style: const TextStyle(fontSize: 9, color: kMuted, fontFamily: 'monospace')),
-                      ]),
-                    ])),
-                    if (isActive) const Icon(Icons.cast, size: 16, color: kAccent)
-                    else GestureDetector(
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => onCastFile(idx),
+                        behavior: HitTestBehavior.opaque,
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(fileName,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: isFileActiveOnTv ? kText : kMuted),
+                              overflow: TextOverflow.ellipsis),
+                          const SizedBox(height: 2),
+                          Row(children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                  color: fileColor(fileType).withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(4)),
+                              child: Text(isPdf ? 'PDF' : (isVideo ? ext : 'PPT'),
+                                  style: TextStyle(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                      color: fileColor(fileType),
+                                      letterSpacing: 0.5)),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(formatFileSize(fileSize),
+                                style: const TextStyle(fontSize: 9, color: kMuted, fontFamily: 'monospace')),
+                            if (isFileActiveOnTv) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade900.withOpacity(0.4),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: Colors.green.shade500, width: 0.8),
+                                ),
+                                child: const Text('LIVE ON TV',
+                                    style: TextStyle(
+                                        fontSize: 7.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.greenAccent)),
+                              ),
+                            ],
+                          ]),
+                        ]),
+                      ),
+                    ),
+                    GestureDetector(
                       onTap: () => onCastFile(idx),
                       child: Container(
                         padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(color: kAccent.withOpacity(0.15), borderRadius: BorderRadius.circular(8), border: Border.all(color: kAccent.withOpacity(0.3))),
-                        child: const Icon(Icons.cast, size: 16, color: kAccent),
+                        decoration: BoxDecoration(
+                          color: isFileActiveOnTv
+                              ? kAccent.withOpacity(0.25)
+                              : kAccent.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: isFileActiveOnTv
+                                  ? kAccent
+                                  : kAccent.withOpacity(0.3)),
+                        ),
+                        child: Icon(
+                          isFileActiveOnTv ? Icons.cast_connected : Icons.cast,
+                          size: 16,
+                          color: isFileActiveOnTv ? kAccent : kMuted,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -571,9 +671,12 @@ class FilesTab extends StatelessWidget {
                       child: Icon(Icons.delete_outline, size: 16, color: Colors.red.shade400),
                     ),
                   ]),
-                  if (!isActive) Padding(
+                  Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: SizedBox(width: double.infinity, child: castFileBtn(castLabel(), () => onCastFile(idx))),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: castFileBtn(castLabel(), () => onCastFile(idx)),
+                    ),
                   ),
                 ]),
               );

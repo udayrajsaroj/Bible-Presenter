@@ -6,6 +6,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:image/image.dart' as img;
+import 'widgets/shared_widgets.dart';
 
 /// Off-screen slide renderer for DLNA "TV Direct" casting (Phase D1).
 ///
@@ -38,94 +40,87 @@ class SlideRenderer {
   static int serverPort = 3000;
 
   static int _slideCounter = 0;
-  static OverlayEntry? _entry;
-  static final GlobalKey _boundaryKey = GlobalKey();
 
   // ── tv.html palette ──
   static const Color _ink = Color(0xFF0a0a0f);
   static const Color _gold = Color(0xFFc9a96e);
 
-  /// Renders [tvState] to a full-HD PNG, or null when no overlay context is
-  /// available yet (e.g. captures requested before the first frame).
+  /// Renders [tvState] to a full-HD JPEG/PNG using a headless off-screen pipeline.
+  /// Does not depend on Overlay or frame ticks, preventing assertion errors
+  /// and returning immediately.
   static Future<Uint8List?> capture(Map<String, dynamic> tvState,
-      {required BuildContext context}) async {
-    final overlay = Overlay.maybeOf(context, rootOverlay: true);
-    if (overlay == null) return null;
+      {BuildContext? context}) async {
+    try {
+      final repaintBoundary = RenderRepaintBoundary();
+      final pipelineOwner = PipelineOwner();
+      final buildOwner = BuildOwner(focusManager: FocusManager());
 
-    // Drop any previous capture widget before installing the new one.
-    _removeEntry();
-
-    final completer = Completer<Uint8List?>();
-    late final OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Offstage(
-        offstage: true,
-        child: UnconstrainedBox(
-          constrainedAxis: null,
-          child: SizedBox(
-            width: slideSize.width,
-            height: slideSize.height,
-            child: RepaintBoundary(
-              key: _boundaryKey,
-              child: MediaQuery(
-                // Fixed 1:1 device pixels so text scales like a real TV.
-                data: MediaQueryData(size: slideSize),
-                child: Directionality(
-                  textDirection: TextDirection.ltr,
-                  child: buildSlideWidget(tvState),
-                ),
-              ),
-            ),
+      final rootElement = RenderObjectToWidgetAdapter<RenderBox>(
+        container: repaintBoundary,
+        child: MediaQuery(
+          data: const MediaQueryData(size: slideSize),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: buildSlideWidget(tvState),
           ),
         ),
-      ),
-    );
-    _entry = entry;
-    overlay.insert(entry);
+      ).attachToRenderTree(buildOwner);
 
-    // Let the widget build, layout and paint before capturing. Two frames:
-    // one for the widget tree, one for async image/typography resolution.
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      SchedulerBinding.instance.addPostFrameCallback((_) async {
-        try {
-          final boundary = _boundaryKey.currentContext?.findRenderObject()
-              as RenderRepaintBoundary?;
-          if (boundary == null || !boundary.attached) {
-            completer.complete(null);
-            return;
-          }
-          final image = await boundary.toImage(pixelRatio: 1.0);
-          final data =
-              await image.toByteData(format: ui.ImageByteFormat.png);
-          image.dispose();
-          completer.complete(data?.buffer.asUint8List());
-        } catch (_) {
-          completer.complete(null);
-        }
-      });
-    });
+      buildOwner.buildScope(rootElement);
+      buildOwner.finalizeTree();
 
-    final result = await completer.future;
-    _removeEntry();
-    return result;
+      pipelineOwner.rootNode = repaintBoundary;
+      repaintBoundary.layout(BoxConstraints.tight(slideSize));
+
+      final rootLayer = OffsetLayer();
+      rootLayer.attach(pipelineOwner);
+      repaintBoundary.scheduleInitialPaint(rootLayer);
+
+      pipelineOwner.flushLayout();
+      pipelineOwner.flushCompositingBits();
+      pipelineOwner.flushPaint();
+
+      final image = await repaintBoundary.toImage(pixelRatio: 1.0);
+      try {
+        rootLayer.detach();
+        rootElement.unmount();
+      } catch (_) {}
+
+      // Use Skia native C++ PNG encoding (instantaneous ~30-50ms, zero main-thread stall)
+      final pngData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final outputBytes = pngData?.buffer.asUint8List();
+      image.dispose();
+      return outputBytes;
+    } catch (_) {
+      return null;
+    }
   }
 
-  static void _removeEntry() {
-    _entry?.remove();
-    _entry = null;
-  }
 
-  /// Writes a captured PNG to `<uploadDir>/dlna/slide_<n>.png` and returns the
-  /// URL the TV should download, e.g.
-  /// `http://192.168.1.20:3000/dlna/slide_7.png`. Returns null when the
-  /// upload directory has not been configured yet.
-  static Future<String?> publish(Uint8List png) async {
+  /// Writes a captured slide to `<uploadDir>/dlna/slide_<n>.(jpg|png)` and returns the
+  /// URL the TV should download. Automatically cleans up older slide files to prevent disk bloat.
+  static Future<String?> publish(Uint8List bytes) async {
     if (uploadDirPath.isEmpty) return null;
     _slideCounter++;
     final dir = Directory('$uploadDirPath/dlna');
     if (!await dir.exists()) await dir.create(recursive: true);
-    final name = 'slide_$_slideCounter.png';
-    await File('${dir.path}/$name').writeAsBytes(png, flush: true);
+    
+    final isJpg = bytes.length > 2 && bytes[0] == 0xFF && bytes[1] == 0xD8;
+    final ext = isJpg ? 'jpg' : 'png';
+    final name = 'slide_$_slideCounter.$ext';
+    await File('${dir.path}/$name').writeAsBytes(bytes, flush: true);
+
+    // Keep only the last 5 slide files to prevent disk bloat
+    try {
+      final oldFiles = dir.listSync().whereType<File>().toList();
+      if (oldFiles.length > 5) {
+        oldFiles.sort((a, b) => a.statSync().modified.compareTo(b.statSync().modified));
+        for (var i = 0; i < oldFiles.length - 5; i++) {
+          try { oldFiles[i].deleteSync(); } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
     final ip = (deviceIp.isEmpty || deviceIp == '...') ? '127.0.0.1' : deviceIp;
     return 'http://$ip:$serverPort/dlna/$name';
   }
@@ -196,44 +191,178 @@ class SlideRenderer {
       return _animatedGradientStandIn(url);
     }
     if (url.isEmpty) return const SizedBox.shrink();
-    return Opacity(
-      opacity: 0.45,
-      child: Image.network(
+
+    Widget imageWidget;
+    File? localFile;
+    if (url.startsWith('file://')) {
+      localFile = File(url.replaceFirst('file://', ''));
+    } else if (url.contains('/uploads/')) {
+      final fileName = Uri.tryParse(url)?.pathSegments.last;
+      if (fileName != null && uploadDirPath != null) {
+        final f = File('$uploadDirPath/$fileName');
+        if (f.existsSync()) localFile = f;
+      }
+    } else if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      final f = File(url);
+      if (f.existsSync()) localFile = f;
+    }
+
+    if (localFile != null && localFile.existsSync()) {
+      imageWidget = Image.file(
+        localFile,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      );
+    } else {
+      imageWidget = Image.network(
         url,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-      ),
+      );
+    }
+
+    return Opacity(
+      opacity: 0.45,
+      child: imageWidget,
     );
   }
 
-  /// The TV's animated CSS gradients are approximated with static gradients
-  /// in the PNG (renderers show a single still frame anyway).
+  /// The TV's animated CSS gradients are mirrored with rich multi-layer dark
+  /// ambient gradients for DLNA still-frame rendering (Kodi/Smart TVs).
   static Widget _animatedGradientStandIn(String id) {
-    final List<List<Color>> palettes = const [
-      [Color(0xFF0a0a2e), Color(0xFF1a0a3e), Color(0xFF0a2a4e), Color(0xFF0a0a2e)],
-      [Color(0xFF1a1a0a), Color(0xFF0a0a0f)],
-      [Color(0xFF1a0a0a), Color(0xFF2a1a0a), Color(0xFF1a0a1a), Color(0xFF0a0a2a)],
-      [Color(0xFF0a1a2a), Color(0xFF0a2a3a), Color(0xFF0a1a3a), Color(0xFF0a0a2a)],
-      [Color(0xFF0a0a0a), Color(0xFF2a1208)],
-    ];
     final key = id.replaceFirst('animated:', '');
-    final idx = switch (key) {
-      'aurora' => 0,
-      'divine' => 1,
-      'sunset' => 2,
-      'ocean' => 3,
-      'fire' => 4,
-      _ => 0,
-    };
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: palettes[idx],
-        ),
-      ),
-    );
+    switch (key) {
+      case 'aurora': // Celestial Nebula
+        return const Stack(
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF03030c), Color(0xFF080d24), Color(0xFF150d30), Color(0xFF04201c), Color(0xFF03030c)],
+                ),
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0.3, -0.2),
+                  radius: 0.95,
+                  colors: [Color(0x330ea5e9), Color(0x228b5cf6), Colors.transparent],
+                ),
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(-0.4, 0.5),
+                  radius: 0.8,
+                  colors: [Color(0x2010b981), Colors.transparent],
+                ),
+              ),
+            ),
+          ],
+        );
+      case 'divine': // Divine Glory
+        return const Stack(
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment.center,
+                  radius: 1.1,
+                  colors: [Color(0xFF18150d), Color(0xFF090805), Color(0xFF030302)],
+                ),
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment.center,
+                  radius: 0.6,
+                  colors: [Color(0x3ec9a96e), Color(0x18f59e0b), Colors.transparent],
+                ),
+              ),
+            ),
+          ],
+        );
+      case 'ocean': // Living Waters
+        return const Stack(
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF020914), Color(0xFF031a2e), Color(0xFF02101c), Color(0xFF010408)],
+                ),
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0.4, 0.2),
+                  radius: 0.85,
+                  colors: [Color(0x2b06b6d4), Color(0x160284c7), Colors.transparent],
+                ),
+              ),
+            ),
+          ],
+        );
+      case 'fire': // Altar Flame
+        return const Stack(
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF060202), Color(0xFF0e0404), Color(0xFF160604)],
+                ),
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0.0, 1.0),
+                  radius: 0.95,
+                  colors: [Color(0x3fef4444), Color(0x2af59e0b), Color(0x12b45309), Colors.transparent],
+                ),
+              ),
+            ),
+          ],
+        );
+      case 'sunset': // Midnight Sanctuary
+      default:
+        return const Stack(
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF06020c), Color(0xFF1c0533), Color(0xFF28041a), Color(0xFF070b24), Color(0xFF020106)],
+                ),
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0.0, 0.1),
+                  radius: 0.8,
+                  colors: [Color(0x2ea855f7), Color(0x1aec4899), Colors.transparent],
+                ),
+              ),
+            ),
+          ],
+        );
+    }
   }
 
   // ── Per-type content ──
@@ -291,8 +420,52 @@ class SlideRenderer {
     final en = c['textEn'] as String? ?? '';
     final fallback = c['text'] as String? ?? '';
     final base = (c['fontSize'] as num? ?? 44).toDouble();
-    final totalLen = hi.length + en.length + fallback.length;
-    final fs = _autoFontSize(totalLen > 0 ? 'x' * totalLen : 'x', base);
+
+    // Accurately combine text without duplicating fallback
+    final String combinedText;
+    if (hi.isNotEmpty && en.isNotEmpty) {
+      combinedText = '$hi\n\n$en';
+    } else if (hi.isNotEmpty) {
+      combinedText = hi;
+    } else if (en.isNotEmpty) {
+      combinedText = en;
+    } else {
+      combinedText = fallback;
+    }
+
+    final double maxWidth = slideSize.width - 240; // 1680px — leaves 120px safe padding from borders
+    const double maxHeight = 800; // leaves 140px safe margin top and bottom
+
+    double probe(double size) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: combinedText,
+          style: TextStyle(
+            fontSize: size,
+            height: 1.38,
+            fontFamilyFallback: const ['serif'],
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: maxWidth);
+      final h = tp.height;
+      tp.dispose();
+      return h;
+    }
+
+    // Binary search for largest font size that fills available space without touching borders
+    double lo = 28.0;
+    double hiSize = (base * 1.5).clamp(58.0, 72.0);
+    for (int i = 0; i < 16; i++) {
+      final mid = (lo + hiSize) / 2;
+      if (probe(mid) <= maxHeight) {
+        lo = mid;
+      } else {
+        hiSize = mid;
+      }
+    }
+    final fs = lo.clamp(28.0, 72.0);
+    final isDevanagari = RegExp(r'[\u0900-\u097F]').hasMatch(en);
 
     Widget text(String s, {bool italic = false}) => Text(
           s,
@@ -300,8 +473,8 @@ class SlideRenderer {
           style: TextStyle(
             color: italic ? Colors.white70 : Colors.white,
             fontSize: fs,
-            height: 1.55,
-            fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+            height: 1.38,
+            fontStyle: (italic && !isDevanagari) ? FontStyle.italic : FontStyle.normal,
             fontWeight: italic ? FontWeight.w300 : FontWeight.w400,
             fontFamilyFallback: const ['serif'],
             shadows: const [_tvShadow],

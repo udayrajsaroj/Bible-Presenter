@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:network_info_plus/network_info_plus.dart';
@@ -11,6 +10,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'server.dart';
 import 'theme.dart';
@@ -180,12 +180,80 @@ class _ControllerPageState extends State<ControllerPage>
     }
   }
 
+  // ══════════════════ NETWORK RESOLUTION ══════════════════
+  static Future<String> findBestLanIp() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        type: InternetAddressType.IPv4,
+      );
+
+      bool isCellular(String name) {
+        final lower = name.toLowerCase();
+        return lower.startsWith('rmnet') ||
+            lower.startsWith('ccmni') ||
+            lower.startsWith('pdp') ||
+            lower.startsWith('dummy');
+      }
+
+      bool isPrivateLan(String ip) {
+        if (ip.startsWith('100.')) return false; // Reject CGNAT
+        if (ip.startsWith('127.')) return false; // Reject loopback
+        if (ip.startsWith('169.254.')) return false; // Reject link-local
+        if (ip.startsWith('192.168.')) return true;
+        if (ip.startsWith('10.')) return true;
+        final m = RegExp(r'^172\.(\d+)\.').firstMatch(ip);
+        if (m != null) {
+          final sec = int.tryParse(m.group(1)!) ?? 0;
+          if (sec >= 16 && sec <= 31) return true;
+        }
+        return false;
+      }
+
+      // Priority 1: Non-cellular private LAN (Wi-Fi, hotspot WLAN, Ethernet)
+      for (final iface in interfaces) {
+        if (!isCellular(iface.name)) {
+          for (final addr in iface.addresses) {
+            if (isPrivateLan(addr.address)) {
+              return addr.address;
+            }
+          }
+        }
+      }
+
+      // Priority 2: Any private LAN interface
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          if (isPrivateLan(addr.address)) {
+            return addr.address;
+          }
+        }
+      }
+
+      // Priority 3: Fall back to NetworkInfo().getWifiIP() if private
+      final wifiIp = await NetworkInfo().getWifiIP();
+      if (wifiIp != null && isPrivateLan(wifiIp)) {
+        return wifiIp;
+      }
+    } catch (_) {}
+    return '127.0.0.1';
+  }
+
   // ══════════════════ BOOT SEQUENCE ══════════════════
   Future<void> _boot() async {
+    int serverPort = 3000;
     try {
+      final receivePort = ReceivePort();
       final appDir = await getApplicationDocumentsDirectory();
       final uploadPath = '${appDir.path}/biblepresenter_uploads';
-      await Isolate.spawn(startServer, uploadPath);
+      await Isolate.spawn(startServer, [uploadPath, receivePort.sendPort]);
+      receivePort.listen((msg) {
+        if (msg is Map && msg.containsKey('port')) {
+          final p = msg['port'] as int;
+          serverPort = p;
+          SlideRenderer.serverPort = p;
+        }
+      });
     } catch (e) {
       print('[BiblePresenter] Isolate.spawn failed: $e');
     }
@@ -195,7 +263,7 @@ class _ControllerPageState extends State<ControllerPage>
       await Future.delayed(const Duration(seconds: 1));
       try {
         await WebSocketChannel.connect(
-          Uri.parse('ws://127.0.0.1:3000/ws'),
+          Uri.parse('ws://127.0.0.1:$serverPort/ws'),
         ).ready.timeout(const Duration(seconds: 2));
         break;
       } catch (_) {
@@ -204,16 +272,17 @@ class _ControllerPageState extends State<ControllerPage>
     }
 
     try {
-      final ip = await NetworkInfo().getWifiIP();
-      if (ip != null && mounted) setState(() => _deviceIp = ip);
+      final ip = await findBestLanIp();
+      if (mounted) setState(() => _deviceIp = ip);
     } catch (_) {}
 
     // DLNA "TV Direct": boot the UPnP stack (Android-only, no-ops elsewhere)
     // and point the slide renderer at the folder the server isolate serves.
+    final appDir = await getApplicationDocumentsDirectory();
     SlideRenderer.uploadDirPath =
-        '${(await getApplicationDocumentsDirectory()).path}/biblepresenter_uploads';
+        '${appDir.path}/biblepresenter_uploads';
     SlideRenderer.deviceIp = _deviceIp;
-    SlideRenderer.serverPort = 3000; // the phone always connects to 3000
+    SlideRenderer.serverPort = serverPort;
     await _dlna.start();
     await _checkReconnectBanner();
 
@@ -231,6 +300,11 @@ class _ControllerPageState extends State<ControllerPage>
           _welcomeMessage = savedMsg;
           _welcomeMsgCtrl.text = savedMsg;
         });
+      }
+      final savedBg = prefs.getString('current_bg_url');
+      if (savedBg != null && savedBg.isNotEmpty && mounted) {
+        setState(() => _bgUrl = savedBg);
+        _emit('update-background', {'url': savedBg});
       }
     } catch (_) {}
   }
@@ -277,16 +351,18 @@ class _ControllerPageState extends State<ControllerPage>
   // ══════════════════ IP REFRESH ══════════════════
   Future<void> _refreshIp() async {
     try {
-      final ip = await NetworkInfo().getWifiIP();
-      if (ip != null && mounted) {
+      final ip = await findBestLanIp();
+      if (mounted) {
         setState(() => _deviceIp = ip);
         SlideRenderer.deviceIp = ip;
-        _showSnack('IP refreshed: $ip');
-      } else {
-        _showSnack('Could not get WiFi IP', error: true);
+        if (ip == '127.0.0.1' || ip.isEmpty) {
+          _showSnack('No Wi-Fi or Hotspot detected. Connect to Wi-Fi to cast to TV.', error: true);
+        } else {
+          _showSnack('IP refreshed: $ip');
+        }
       }
     } catch (e) {
-      _showSnack('IP refresh error', error: true);
+      _showSnack('IP refresh error: $e', error: true);
     }
   }
 
@@ -296,7 +372,9 @@ class _ControllerPageState extends State<ControllerPage>
   // ══════════════════ RELOAD UPLOADED FILES ══════════════════
   Future<void> _reloadUploadedFiles() async {
     try {
-      final uri = Uri.parse('http://127.0.0.1:3000/api/uploads');
+      final appDir = await getApplicationDocumentsDirectory();
+      final uploadPath = '${appDir.path}/biblepresenter_uploads';
+      final uri = Uri.parse('http://127.0.0.1:${SlideRenderer.serverPort}/api/uploads');
       final response = await http.get(uri);
       if (response.statusCode == 200) {
         final List<dynamic> files = jsonDecode(response.body) as List<dynamic>;
@@ -308,7 +386,9 @@ class _ControllerPageState extends State<ControllerPage>
           final url = f['url'] as String? ?? '';
           final type = f['type'] as String? ?? 'other';
           final size = f['size'] as int? ?? 0;
-          final fullUrl = 'http://$ip:3000$url';
+          final fullUrl = 'http://$ip:${SlideRenderer.serverPort}$url';
+          final diskFile = File('$uploadPath/$name');
+          final resolvedLocalPath = diskFile.existsSync() ? diskFile.path : '';
           if (type == 'image') {
             reloadedBgs.add({'name': name, 'url': fullUrl});
           } else {
@@ -317,7 +397,7 @@ class _ControllerPageState extends State<ControllerPage>
               'url': url,
               'type': type,
               'size': size,
-              'localPath': ''
+              'localPath': resolvedLocalPath,
             });
           }
         }
@@ -346,6 +426,7 @@ class _ControllerPageState extends State<ControllerPage>
 
   void _deleteSong(int idx) {
     final songState = SongState.of(context);
+    if (idx < 0 || idx >= songState.allSongs.length) return;
     final song = songState.allSongs[idx];
     if (song['source'] != 'manual') return;
     songState.deleteSong(idx);
@@ -504,6 +585,8 @@ class _ControllerPageState extends State<ControllerPage>
       .toList();
 
   void _castSong() {
+    _currentlyCastUrl = '';
+    setState(() => _activeFileIndex = -1);
     final songState = SongState.of(context);
     if (songState.selectedSongIndex < 0 ||
         songState.selectedSongIndex >= songState.filteredSongs.length) return;
@@ -543,6 +626,8 @@ class _ControllerPageState extends State<ControllerPage>
 
   // ══════════════════ CAST LOGO ══════════════════
   void _castLogo() {
+    _currentlyCastUrl = '';
+    setState(() => _activeFileIndex = -1);
     final bibleState = BibleState.of(context);
     if (_customLogoPath.isNotEmpty) {
       _emit('cast-logo', {
@@ -565,6 +650,8 @@ class _ControllerPageState extends State<ControllerPage>
   }
 
   void _castWelcome() {
+    _currentlyCastUrl = '';
+    setState(() => _activeFileIndex = -1);
     if (_customLogoPath.isNotEmpty) {
       _emit('cast-welcome', {
         'logo': 'data:image/png;base64,$_customLogoPath',
@@ -941,8 +1028,7 @@ class _ControllerPageState extends State<ControllerPage>
     if (!_dlna.isConnected || _tvState['type'] == 'idle') return;
     try {
       final type = _tvState['type'] as String?;
-      final content = Map<String, dynamic>.from(
-          _tvState['content'] as Map? ?? {});
+      final bg = _bgUrl != null ? {'url': _bgUrl} : null;
       switch (type) {
         case 'verse':
           final bs = BibleState.of(context);
@@ -951,44 +1037,111 @@ class _ControllerPageState extends State<ControllerPage>
               .toList()
             ..sort();
           final idx = vList.indexOf(bs.selectedVerse);
-          if (idx < 0 || idx >= vList.length - 1) return;
-          final nv = bs.bible[bs.selectedBook]?[bs.selectedChapter]
-              ?[vList[idx + 1]];
-          content['verse'] = vList[idx + 1];
-          content['textEn'] = nv?['secondary'] ?? '';
-          content['textHi'] = nv?['primary'] ?? '';
-          content['text'] = nv?['primary'] ?? nv?['secondary'] ?? '';
-          OutputRouter.instance.preRender(
-              {'type': 'verse', 'content': content}, context);
+          if (idx >= 0) {
+            // Pre-render N+1
+            if (idx < vList.length - 1) {
+              final nextVNum = vList[idx + 1];
+              final nv = bs.bible[bs.selectedBook]?[bs.selectedChapter]?[nextVNum];
+              OutputRouter.instance.preRender({
+                'type': 'verse',
+                'content': {
+                  'book': bs.selectedBook,
+                  'chapter': bs.selectedChapter,
+                  'verse': nextVNum,
+                  'textEn': nv?['secondary'] ?? '',
+                  'textHi': nv?['primary'] ?? '',
+                  'text': nv?['primary'] ?? nv?['secondary'] ?? '',
+                  'fontSize': bs.fontSize,
+                },
+                'background': bg,
+              }, context);
+            }
+            // Pre-render N-1
+            if (idx > 0) {
+              final prevVNum = vList[idx - 1];
+              final pv = bs.bible[bs.selectedBook]?[bs.selectedChapter]?[prevVNum];
+              OutputRouter.instance.preRender({
+                'type': 'verse',
+                'content': {
+                  'book': bs.selectedBook,
+                  'chapter': bs.selectedChapter,
+                  'verse': prevVNum,
+                  'textEn': pv?['secondary'] ?? '',
+                  'textHi': pv?['primary'] ?? '',
+                  'text': pv?['primary'] ?? pv?['secondary'] ?? '',
+                  'fontSize': bs.fontSize,
+                },
+                'background': bg,
+              }, context);
+            }
+          }
           break;
         case 'slide':
-          final next = _activeSlide + 1;
-          if (next >= _slides.length) return;
-          final sl = _slides[next];
-          OutputRouter.instance.preRender({
-            'type': 'slide',
-            'content': {
-              'title': sl['title'] ?? '',
-              'subtitle': sl['subtitle'] ?? '',
-              'text': sl['text'] ?? '',
-              'fontSize': BibleState.of(context).fontSize,
-              if (_bgUrl != null) 'background': {'url': _bgUrl}
-            }
-          }, context);
+          // Pre-render N+1
+          if (_activeSlide + 1 < _slides.length) {
+            final sl = _slides[_activeSlide + 1];
+            OutputRouter.instance.preRender({
+              'type': 'slide',
+              'content': {
+                'title': sl['title'] ?? '',
+                'subtitle': sl['subtitle'] ?? '',
+                'text': sl['text'] ?? '',
+                'fontSize': BibleState.of(context).fontSize,
+              },
+              'background': bg,
+            }, context);
+          }
+          // Pre-render N-1
+          if (_activeSlide > 0 && _slides.isNotEmpty) {
+            final sl = _slides[_activeSlide - 1];
+            OutputRouter.instance.preRender({
+              'type': 'slide',
+              'content': {
+                'title': sl['title'] ?? '',
+                'subtitle': sl['subtitle'] ?? '',
+                'text': sl['text'] ?? '',
+                'fontSize': BibleState.of(context).fontSize,
+              },
+              'background': bg,
+            }, context);
+          }
           break;
         case 'song':
+          final content = Map<String, dynamic>.from(_tvState['content'] as Map? ?? {});
           final stanzas = List<String>.from(content['stanzas'] ?? []);
-          final next = (content['currentStanza'] as int? ?? 0) + 1;
-          if (next >= stanzas.length) return;
-          content['currentStanza'] = next;
-          OutputRouter.instance.preRender(
-              {'type': 'song', 'content': content}, context);
+          final cur = content['currentStanza'] as int? ?? 0;
+          // Pre-render N+1
+          if (cur + 1 < stanzas.length) {
+            final nextC = Map<String, dynamic>.from(content);
+            nextC['currentStanza'] = cur + 1;
+            OutputRouter.instance.preRender({
+              'type': 'song',
+              'content': nextC,
+              'background': bg,
+            }, context);
+          }
+          // Pre-render N-1
+          if (cur > 0 && cur < stanzas.length) {
+            final prevC = Map<String, dynamic>.from(content);
+            prevC['currentStanza'] = cur - 1;
+            OutputRouter.instance.preRender({
+              'type': 'song',
+              'content': prevC,
+              'background': bg,
+            }, context);
+          }
           break;
         case 'pdf':
-          final next = _pdfCurrentPage + 1;
-          if (_pdfTotalPages > 0 && next > _pdfTotalPages) return;
-          OutputRouter.instance.preRenderPdfPage(
-              _currentPdfLocalPath, next, context);
+          if (_pdfTotalPages > 0) {
+            if (_pdfCurrentPage + 1 <= _pdfTotalPages) {
+              OutputRouter.instance.preRenderPdfPage(
+                  _currentPdfLocalPath, _pdfCurrentPage + 1, context);
+            }
+            if (_pdfCurrentPage > 1) {
+              OutputRouter.instance.preRenderPdfPage(
+                  _currentPdfLocalPath, _pdfCurrentPage - 1, context);
+            }
+          }
           break;
       }
     } catch (_) {}
@@ -1151,6 +1304,8 @@ class _ControllerPageState extends State<ControllerPage>
 
   // ── Cast actions ──
   void _castVerse() {
+    _currentlyCastUrl = '';
+    setState(() => _activeFileIndex = -1);
     final bibleState = BibleState.of(context);
     final v = bibleState.selectedVerseData;
     _emit('cast-verse', {
@@ -1167,7 +1322,11 @@ class _ControllerPageState extends State<ControllerPage>
   }
 
   void _castSlide(int idx) {
-    setState(() => _activeSlide = idx);
+    _currentlyCastUrl = '';
+    setState(() {
+      _activeSlide = idx;
+      _activeFileIndex = -1;
+    });
     final s = _slides[idx];
     _emit('cast-slide', {
       'title': s['title'] ?? '',
@@ -1183,6 +1342,7 @@ class _ControllerPageState extends State<ControllerPage>
 
   void _clearScreen() {
     _currentlyCastUrl = '';
+    setState(() => _activeFileIndex = -1);
     _emit('clear-screen', {});
   }
 
@@ -1216,6 +1376,7 @@ class _ControllerPageState extends State<ControllerPage>
 
   void _prevVerse() {
     final bibleState = BibleState.of(context);
+    final chList = (bibleState.selectedBookChapters ?? {}).keys.toList()..sort();
     final vList =
         (bibleState.selectedBookChapters?[bibleState.selectedChapter] ?? {})
             .keys
@@ -1225,20 +1386,49 @@ class _ControllerPageState extends State<ControllerPage>
     if (idx > 0) {
       bibleState.selectedVerse = vList[idx - 1];
       _castVerse();
+    } else {
+      // Verse boundary: go to previous chapter's last verse
+      final chIdx = chList.indexOf(bibleState.selectedChapter);
+      if (chIdx > 0) {
+        final prevCh = chList[chIdx - 1];
+        bibleState.selectedChapter = prevCh;
+        final prevVList =
+            (bibleState.selectedBookChapters?[prevCh] ?? {}).keys.toList()
+              ..sort();
+        if (prevVList.isNotEmpty) {
+          bibleState.selectedVerse = prevVList.last;
+          _castVerse();
+        }
+      }
     }
   }
 
   void _nextVerse() {
     final bibleState = BibleState.of(context);
+    final chList = (bibleState.selectedBookChapters ?? {}).keys.toList()..sort();
     final vList =
         (bibleState.selectedBookChapters?[bibleState.selectedChapter] ?? {})
             .keys
             .toList()
           ..sort();
     final idx = vList.indexOf(bibleState.selectedVerse);
-    if (idx < vList.length - 1) {
+    if (idx < vList.length - 1 && idx >= 0) {
       bibleState.selectedVerse = vList[idx + 1];
       _castVerse();
+    } else {
+      // Verse boundary: advance to next chapter's first verse
+      final chIdx = chList.indexOf(bibleState.selectedChapter);
+      if (chIdx < chList.length - 1 && chIdx >= 0) {
+        final nextCh = chList[chIdx + 1];
+        bibleState.selectedChapter = nextCh;
+        final nextVList =
+            (bibleState.selectedBookChapters?[nextCh] ?? {}).keys.toList()
+              ..sort();
+        if (nextVList.isNotEmpty) {
+          bibleState.selectedVerse = nextVList.first;
+          _castVerse();
+        }
+      }
     }
   }
 
@@ -1356,7 +1546,8 @@ class _ControllerPageState extends State<ControllerPage>
     }
   }
 
-  void _castFile(int idx) {
+  Future<void> _castFile(int idx) async {
+    if (idx < 0 || idx >= _uploadedFiles.length) return;
     final f = _uploadedFiles[idx];
     final fileType = f['type'] as String? ?? 'other';
     final fileUrl = f['url'] as String? ?? '';
@@ -1372,19 +1563,53 @@ class _ControllerPageState extends State<ControllerPage>
     });
     if (fileType == 'pdf') {
       _currentlyCastUrl = fileUrl;
-      _currentPdfLocalPath = f['localPath'] as String? ?? '';
+      var localP = f['localPath'] as String? ?? '';
+      if (localP.isEmpty) {
+        final uploadDir = SlideRenderer.uploadDirPath;
+        if (uploadDir.isNotEmpty) {
+          final diskFile = File('$uploadDir/$fileName');
+          if (diskFile.existsSync()) {
+            localP = diskFile.path;
+            f['localPath'] = localP;
+          }
+        }
+      }
+      if (localP.isEmpty) {
+        try {
+          final appDir = await getApplicationDocumentsDirectory();
+          final diskFile = File('${appDir.path}/biblepresenter_uploads/$fileName');
+          if (diskFile.existsSync()) {
+            localP = diskFile.path;
+            f['localPath'] = localP;
+          }
+        } catch (_) {}
+      }
+      _currentPdfLocalPath = localP;
+      if (localP.isNotEmpty) {
+        try {
+          final doc = await pdfx.PdfDocument.openFile(localP);
+          if (mounted && doc.pagesCount > 0) {
+            setState(() => _pdfTotalPages = doc.pagesCount);
+          }
+          await doc.close();
+        } catch (_) {}
+      }
       _emit('cast-pdf', {
         'url': fileUrl,
         'name': fileName,
         'currentPage': 1,
-        'totalPages': 0,
+        'totalPages': _pdfTotalPages,
         '_localPdfPath': _currentPdfLocalPath
       });
       _showSnack('Casting PDF to TV!');
     } else if (fileType == 'pptx') {
       _currentlyCastUrl = fileUrl;
       _emit('cast-pptx', {'url': fileUrl, 'name': fileName});
-      _showSnack('Casting PPT to TV!');
+      if (_dlna.isConnected) {
+        _showSnack('PPT requires Browser Connect mode — open TV Browser to view');
+      } else {
+        _showSnack('Casting PPT to TV!');
+      }
     } else if (fileType == 'video') {
       _castVideo(idx);
     } else {
@@ -1668,18 +1893,22 @@ class _ControllerPageState extends State<ControllerPage>
       final file = File(filePath);
       final bytes = await file.readAsBytes();
       final uri = Uri.parse(
-          'http://127.0.0.1:3000/api/upload?name=${Uri.encodeComponent(fileName)}');
+          'http://127.0.0.1:${SlideRenderer.serverPort}/api/upload?name=${Uri.encodeComponent(fileName)}');
       final response = await http.post(uri, body: bytes);
       setState(() => _isUploadingBg = false);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final uploadedUrl = data['url'] as String? ?? '';
         final ip = _deviceIp == '...' ? '127.0.0.1' : _deviceIp;
-        final fullUrl = 'http://$ip:3000$uploadedUrl';
+        final fullUrl = 'http://$ip:${SlideRenderer.serverPort}$uploadedUrl';
         setState(() {
           _uploadedBgs.insert(0, {'name': fileName, 'url': fullUrl});
           _bgUrl = fullUrl;
         });
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('current_bg_url', fullUrl);
+        } catch (_) {}
         _emit('update-background', {'url': fullUrl});
         _showSnack('Background set!');
       } else {
@@ -2828,6 +3057,11 @@ class _ControllerPageState extends State<ControllerPage>
                   onPdfPrevPage: _pdfPrevPage,
                   onPdfNextPage: _pdfNextPage,
                   onOpenFullscreen: _openFilesFullscreen,
+                  onPdfTotalPagesKnown: (t) {
+                    if (mounted && _pdfTotalPages != t) {
+                      setState(() => _pdfTotalPages = t);
+                    }
+                  },
                   videoPosition: _videoPosition,
                   videoDuration: _videoDuration,
                   videoPlaying: _videoPlaying,
@@ -2875,8 +3109,16 @@ class _ControllerPageState extends State<ControllerPage>
                     },
                     onCastLogo: _castLogo,
                     bgUrl: _bgUrl,
-                    onBgUrlChanged: (url) {
+                    onBgUrlChanged: (url) async {
                       setState(() => _bgUrl = url);
+                      try {
+                        final prefs = await SharedPreferences.getInstance();
+                        if (url != null) {
+                          await prefs.setString('current_bg_url', url);
+                        } else {
+                          await prefs.remove('current_bg_url');
+                        }
+                      } catch (_) {}
                       if (url != null)
                         _emit('update-background', {'url': url});
                       else
@@ -3131,7 +3373,7 @@ class _ControllerPageState extends State<ControllerPage>
                 const Icon(Icons.wifi, size: 13, color: kAccent),
                 const SizedBox(width: 6),
                 Expanded(
-                    child: Text('http://$_deviceIp:3000/tv.html',
+                    child: Text('http://$_deviceIp:${SlideRenderer.serverPort}/tv.html',
                         style: const TextStyle(
                             fontFamily: 'monospace',
                             fontSize: 12,
@@ -3156,13 +3398,13 @@ class _ControllerPageState extends State<ControllerPage>
               ]),
               const SizedBox(height: 10),
               Row(children: [
-                Expanded(child: _barBtn(Icons.cast, 'Cast', _showCastDialog)),
+                Expanded(child: _barBtn(Icons.tv, 'Cast to TV', _showCastDialog)),
                 const SizedBox(width: 8),
                 // Quick-cast indicator for Chromecast/AirPlay connection status
                 CastButton(
                     castService: _castService,
                     tvUrl:
-                        'http://${_deviceIp == '...' ? '' : _deviceIp}:3000/tv.html'),
+                        'http://${_deviceIp == '...' ? '' : _deviceIp}:${SlideRenderer.serverPort}/tv.html'),
                 const SizedBox(width: 8),
                 Expanded(child: _barBtn(Icons.copy, 'Copy URL', _copyUrl)),
               ]),

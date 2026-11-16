@@ -25,14 +25,14 @@ class OutputRouter {
   OutputRouter._();
   static final OutputRouter instance = OutputRouter._();
 
-  static const _debounceDuration = Duration(milliseconds: 500);
+  static const _debounceDuration = Duration(milliseconds: 200);
 
   Timer? _debounce;
   Map<String, dynamic>? _pending;
   BuildContext? _pendingContext;
 
-  // Pre-render cache: state key → PNG bytes (small LRU).
-  static const _cacheMax = 4;
+  // Pre-render cache: state key → PNG/JPG bytes (small LRU).
+  static const _cacheMax = 10;
   final Map<String, Uint8List> _cache = <String, Uint8List>{};
   final List<String> _cacheOrder = <String>[];
 
@@ -141,15 +141,35 @@ class OutputRouter {
         base['background'] = data.isEmpty ? null : data;
         return base;
       case 'cast-verse':
-        return {'type': 'verse', 'content': data};
+        return {
+          'type': 'verse',
+          'content': data,
+          'background': data['background'] ?? currentState?['background'],
+        };
       case 'cast-slide':
-        return {'type': 'slide', 'content': data};
+        return {
+          'type': 'slide',
+          'content': data,
+          'background': data['background'] ?? currentState?['background'],
+        };
       case 'cast-song':
-        return {'type': 'song', 'content': data};
+        return {
+          'type': 'song',
+          'content': data,
+          'background': data['background'] ?? currentState?['background'],
+        };
       case 'cast-logo':
-        return {'type': 'logo', 'content': data};
+        return {
+          'type': 'logo',
+          'content': data,
+          'background': data['background'] ?? currentState?['background'],
+        };
       case 'cast-welcome':
-        return {'type': 'welcome', 'content': data};
+        return {
+          'type': 'welcome',
+          'content': data,
+          'background': data['background'] ?? currentState?['background'],
+        };
     }
     return {'type': 'idle'};
   }
@@ -157,18 +177,16 @@ class OutputRouter {
   // ── Debounced rendering ──
 
   void _debounceRender(Map<String, dynamic> state, BuildContext context) {
-    _pending = state;
-    _pendingContext = context;
-    _debounce?.cancel();
-    _debounce = Timer(_debounceDuration, () async {
-      final s = _pending;
-      final ctx = _pendingContext;
-      _pending = null;
-      _pendingContext = null;
-      if (s != null && ctx != null && ctx.mounted) {
-        await _renderAndPush(s, ctx);
-      }
-    });
+    final key = stateKey(state);
+    // Instant response: if slide was pre-rendered, serve immediately!
+    if (_cache.containsKey(key)) {
+      _cancelPending();
+      _renderAndPush(state, context);
+      return;
+    }
+    // Live render: kick off immediately without artificial delay
+    _cancelPending();
+    _renderAndPush(state, context);
   }
 
   void _cancelPending() {

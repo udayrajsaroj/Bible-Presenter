@@ -253,7 +253,47 @@ class BibleState extends ChangeNotifier {
     merge(primary, 'primary');
     merge(secondary, 'secondary');
 
-    _bible = bible;
+    const canonicalOrder = [
+      'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua',
+      'Judges', 'Ruth', '1 Samuel', '2 Samuel', '1 Kings', '2 Kings',
+      '1 Chronicles', '2 Chronicles', 'Ezra', 'Nehemiah', 'Esther', 'Job',
+      'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon', 'Isaiah',
+      'Jeremiah', 'Lamentations', 'Ezekiel', 'Daniel', 'Hosea', 'Joel',
+      'Amos', 'Obadiah', 'Jonah', 'Micah', 'Nahum', 'Habakkuk', 'Zephaniah',
+      'Haggai', 'Zechariah', 'Malachi', 'Matthew', 'Mark', 'Luke', 'John',
+      'Acts', 'Romans', '1 Corinthians', '2 Corinthians', 'Galatians',
+      'Ephesians', 'Philippians', 'Colossians', '1 Thessalonians',
+      '2 Thessalonians', '1 Timothy', '2 Timothy', 'Titus', 'Philemon',
+      'Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John',
+      '3 John', 'Jude', 'Revelation',
+    ];
+
+    final orderedBible = <String, Map<int, Map<int, Map<String, String>>>>{};
+    for (final book in canonicalOrder) {
+      if (bible.containsKey(book)) {
+        orderedBible[book] = bible[book]!;
+      }
+    }
+    for (final entry in bible.entries) {
+      if (!orderedBible.containsKey(entry.key)) {
+        orderedBible[entry.key] = entry.value;
+      }
+    }
+
+    _bible = orderedBible;
+    if (_bible.isNotEmpty) {
+      if (!_bible.containsKey(_selectedBook)) {
+        _selectedBook = _bible.keys.first;
+      }
+      final chapters = _bible[_selectedBook];
+      if (chapters != null && !chapters.containsKey(_selectedChapter)) {
+        _selectedChapter = chapters.keys.first;
+      }
+      final verses = _bible[_selectedBook]?[_selectedChapter];
+      if (verses != null && !verses.containsKey(_selectedVerse)) {
+        _selectedVerse = verses.keys.first;
+      }
+    }
   }
 
   Map<String, Map<int, Map<int, Map<String, String>>>> _fallbackBible() {

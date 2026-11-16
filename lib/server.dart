@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
@@ -72,8 +73,14 @@ String _fileType(String filename) {
 
 // ── Entry point for Isolate.spawn ──
 Future<void> startServer(dynamic message) async {
+  dynamic sendPort;
   // Use persistent path passed from main isolate
-  if (message is String && message.isNotEmpty) {
+  if (message is List && message.isNotEmpty) {
+    _uploadDir = message[0] as String;
+    if (message.length > 1) {
+      sendPort = message[1];
+    }
+  } else if (message is String && message.isNotEmpty) {
     _uploadDir = message;
   } else {
     _uploadDir = '${Directory.systemTemp.path}/biblepresenter_uploads';
@@ -96,18 +103,25 @@ Future<void> startServer(dynamic message) async {
     });
   }
 
-  // ── Serve TV page ──
+  // ── Serve TV page with accurate Content-Length (prevents chunked transfer overhead) ──
+  final tvHtmlBytes = utf8.encode(tvHtmlContent);
   router.get(
       '/',
       (Request req) => _cors(Response.ok(
-            tvHtmlContent,
-            headers: {'Content-Type': 'text/html; charset=utf-8'},
+            tvHtmlBytes,
+            headers: {
+              'Content-Type': 'text/html; charset=utf-8',
+              'Content-Length': '${tvHtmlBytes.length}',
+            },
           )));
   router.get(
       '/tv.html',
       (Request req) => _cors(Response.ok(
-            tvHtmlContent,
-            headers: {'Content-Type': 'text/html; charset=utf-8'},
+            tvHtmlBytes,
+            headers: {
+              'Content-Type': 'text/html; charset=utf-8',
+              'Content-Length': '${tvHtmlBytes.length}',
+            },
           )));
 
   // ── REST: current state ──
@@ -303,7 +317,7 @@ Future<void> startServer(dynamic message) async {
   });
 
   // ── Serve DLNA slide images (TV Direct channel) ──
-  // SlideRenderer writes PNGs into <uploadDir>/dlna/ from the main isolate;
+  // SlideRenderer writes images into <uploadDir>/dlna/ from the main isolate;
   // this route serves them to the TV. no-store: the TV must never cache a
   // slide, or verse changes would show stale images.
   router.get('/dlna/<file>', (Request req, String file) async {
@@ -313,9 +327,12 @@ Future<void> startServer(dynamic message) async {
       if (!await f.exists()) {
         return Response.notFound('no such slide');
       }
-      return Response.ok(await f.readAsBytes(), headers: {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'no-store',
+      final bytes = await f.readAsBytes();
+      return Response.ok(bytes, headers: {
+        'Content-Type': _contentType(safeName),
+        'Content-Length': '${bytes.length}',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
         'Access-Control-Allow-Origin': '*',
       });
     } catch (e) {
@@ -591,17 +608,26 @@ Future<void> startServer(dynamic message) async {
   final handler =
       Pipeline().addMiddleware(logRequests()).addHandler(router.call);
 
+  int boundPort = 3000;
   try {
     final server = await shelf_io.serve(handler, '0.0.0.0', 3000);
+    boundPort = server.port;
     print('[BiblePresenter] Server running on http://0.0.0.0:${server.port}');
-    print('[BiblePresenter] TV URL -> http://<DEVICE_IP>:3000/tv.html');
+    print('[BiblePresenter] TV URL -> http://<DEVICE_IP>:${server.port}/tv.html');
   } catch (e) {
-    print('[BiblePresenter] Server failed: $e');
+    print('[BiblePresenter] Server failed on 3000: $e');
     try {
       final server = await shelf_io.serve(handler, '0.0.0.0', 3001);
+      boundPort = server.port;
       print('[BiblePresenter] Server on alternate port ${server.port}');
     } catch (e2) {
       print('[BiblePresenter] Server failed on alternate: $e2');
     }
+  }
+
+  if (sendPort is SendPort) {
+    try {
+      sendPort.send({'port': boundPort});
+    } catch (_) {}
   }
 }

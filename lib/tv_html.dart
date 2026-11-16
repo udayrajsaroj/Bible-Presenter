@@ -5,10 +5,14 @@ const String tvHtmlContent = r'''
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
   <title>BiblePresenter — TV</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Pro:ital,wght@0,300;0,600;1,300;1,600&family=Tiro+Devanagari+Hindi:ital@0;1&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Non-blocking font loading with comprehensive offline system fallbacks -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Pro:ital,wght@0,300;0,600;1,300;1,600&family=Tiro+Devanagari+Hindi:ital@0;1&display=swap" media="print" onload="this.media='all'">
+  <noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Pro:ital,wght@0,300;0,600;1,300;1,600&family=Tiro+Devanagari+Hindi:ital@0;1&display=swap">
+  </noscript>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
     :root {
       --gold: #c9a96e;
@@ -50,98 +54,139 @@ const String tvHtmlContent = r'''
     }
     .anim-bg.active { opacity: 1; }
 
+    /* 1. Celestial Nebula (Deep Midnight Sapphire & Cosmic Aurora) */
     .anim-aurora {
-      background: linear-gradient(135deg, #0a0a2e 0%, #1a0a3e 25%, #0a2a4e 50%, #1a0a3e 75%, #0a0a2e 100%);
-      background-size: 400% 400%;
-      animation: aurora 12s ease infinite;
+      background: radial-gradient(ellipse at 50% 100%, #03030c 0%, #020205 100%);
     }
-    @keyframes aurora {
+    .anim-aurora::before {
+      content: ''; position: absolute; inset: -20%;
+      background: linear-gradient(135deg, #03030c 0%, #080d24 25%, #150d30 50%, #04201c 75%, #03030c 100%);
+      background-size: 300% 300%;
+      animation: auroraShift 18s ease-in-out infinite;
+      filter: blur(20px);
+    }
+    @keyframes auroraShift {
       0%   { background-position: 0% 50%; }
       50%  { background-position: 100% 50%; }
       100% { background-position: 0% 50%; }
     }
     .anim-aurora::after {
-      content: '';
-      position: absolute; inset: 0;
-      background: radial-gradient(ellipse at 30% 50%, rgba(14,165,233,0.15) 0%, transparent 60%),
-                  radial-gradient(ellipse at 70% 30%, rgba(99,102,241,0.12) 0%, transparent 50%),
-                  radial-gradient(ellipse at 50% 80%, rgba(201,169,110,0.08) 0%, transparent 40%);
-      animation: auroraGlow 8s ease infinite;
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 35% 45%, rgba(14,165,233,0.18) 0%, transparent 60%),
+                  radial-gradient(ellipse at 75% 35%, rgba(139,92,246,0.15) 0%, transparent 55%),
+                  radial-gradient(ellipse at 50% 75%, rgba(16,185,129,0.10) 0%, transparent 50%);
+      animation: auroraPulse 10s ease-in-out infinite alternate;
     }
-    @keyframes auroraGlow {
-      0%, 100% { opacity: 0.8; } 50% { opacity: 1.2; }
+    @keyframes auroraPulse {
+      0% { opacity: 0.7; transform: scale(0.98); }
+      100% { opacity: 1.1; transform: scale(1.03); }
     }
 
+    /* 2. Divine Glory (Sacred Rotating Golden Rays & Breathing Halo) */
     .anim-divine {
-      background: radial-gradient(ellipse at 50% 50%, #1a1a0a 0%, #0a0a0f 100%);
+      background: radial-gradient(circle at 50% 50%, #0d0c07 0%, #040403 100%);
     }
     .anim-divine::before {
-      content: '';
-      position: absolute; inset: -50%;
-      background: conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(201,169,110,0.06) 60deg, transparent 120deg, rgba(201,169,110,0.04) 180deg, transparent 240deg, rgba(201,169,110,0.06) 300deg, transparent 360deg);
-      animation: divineRotate 30s linear infinite;
+      content: ''; position: absolute; inset: -60%;
+      background: conic-gradient(from 0deg at 50% 50%,
+        transparent 0deg, rgba(201,169,110,0.08) 35deg, transparent 70deg,
+        rgba(245,158,11,0.05) 120deg, transparent 160deg,
+        rgba(201,169,110,0.07) 210deg, transparent 250deg,
+        rgba(245,158,11,0.06) 300deg, transparent 340deg);
+      animation: divineRotate 45s linear infinite;
     }
     @keyframes divineRotate { to { transform: rotate(360deg); } }
     .anim-divine::after {
-      content: '';
-      position: absolute; inset: 0;
-      background: radial-gradient(circle at 50% 50%, rgba(201,169,110,0.12) 0%, transparent 40%);
-      animation: divinePulse 6s ease-in-out infinite;
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(circle at 50% 50%, rgba(201,169,110,0.18) 0%, rgba(245,158,11,0.06) 45%, transparent 70%);
+      animation: divineBreath 7s ease-in-out infinite alternate;
     }
-    @keyframes divinePulse {
-      0%, 100% { opacity: 0.6; transform: scale(1); }
-      50% { opacity: 1; transform: scale(1.1); }
+    @keyframes divineBreath {
+      0% { opacity: 0.55; transform: scale(0.95); }
+      100% { opacity: 1.0; transform: scale(1.08); }
     }
 
+    /* 3. Midnight Sanctuary (Royal Amethyst & Sacred Velvet Prism) */
     .anim-sunset {
-      background: linear-gradient(180deg, #1a0a0a 0%, #2a1a0a 30%, #1a0a1a 60%, #0a0a2a 100%);
-      background-size: 100% 200%;
-      animation: sunset 10s ease infinite;
+      background: radial-gradient(ellipse at 50% 40%, #07030f 0%, #020106 100%);
     }
-    @keyframes sunset {
-      0%   { background-position: 50% 0%; }
-      50%  { background-position: 50% 100%; }
-      100% { background-position: 50% 0%; }
+    .anim-sunset::before {
+      content: ''; position: absolute; inset: -15%;
+      background: linear-gradient(145deg, #07020e 0%, #1c0533 30%, #28041a 60%, #070b24 100%);
+      background-size: 250% 250%;
+      animation: sanctuaryShift 20s ease-in-out infinite;
+      filter: blur(15px);
     }
-    .anim-sunset::after {
-      content: '';
-      position: absolute; inset: 0;
-      background: radial-gradient(ellipse at 50% 70%, rgba(220,120,50,0.1) 0%, transparent 50%),
-                  radial-gradient(ellipse at 30% 40%, rgba(201,169,110,0.06) 0%, transparent 40%);
-    }
-
-    .anim-ocean {
-      background: linear-gradient(160deg, #0a1a2a 0%, #0a2a3a 30%, #0a1a3a 60%, #0a0a2a 100%);
-      background-size: 300% 300%;
-      animation: ocean 15s ease infinite;
-    }
-    @keyframes ocean {
+    @keyframes sanctuaryShift {
       0%   { background-position: 0% 0%; }
       50%  { background-position: 100% 100%; }
       100% { background-position: 0% 0%; }
     }
-    .anim-ocean::after {
-      content: '';
-      position: absolute; inset: 0;
-      background: radial-gradient(ellipse at 60% 60%, rgba(14,165,233,0.1) 0%, transparent 50%),
-                  radial-gradient(ellipse at 30% 30%, rgba(56,189,248,0.06) 0%, transparent 40%);
+    .anim-sunset::after {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 50% 50%, rgba(168,85,247,0.15) 0%, transparent 60%),
+                  radial-gradient(ellipse at 25% 70%, rgba(236,72,153,0.09) 0%, transparent 45%),
+                  radial-gradient(ellipse at 80% 30%, rgba(99,102,241,0.11) 0%, transparent 50%);
+      animation: sanctuaryGlow 9s ease-in-out infinite alternate;
+    }
+    @keyframes sanctuaryGlow {
+      0% { opacity: 0.6; }
+      100% { opacity: 1.0; }
     }
 
+    /* 4. Living Waters (Deep Abyssal Ocean & Bioluminescent Swell) */
+    .anim-ocean {
+      background: radial-gradient(ellipse at 50% 60%, #020914 0%, #010408 100%);
+    }
+    .anim-ocean::before {
+      content: ''; position: absolute; inset: -20%;
+      background: linear-gradient(160deg, #020914 0%, #041d33 35%, #021221 65%, #01080e 100%);
+      background-size: 250% 250%;
+      animation: oceanSwell 22s ease-in-out infinite;
+      filter: blur(15px);
+    }
+    @keyframes oceanSwell {
+      0%   { background-position: 20% 0%; }
+      50%  { background-position: 80% 100%; }
+      100% { background-position: 20% 0%; }
+    }
+    .anim-ocean::after {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 65% 55%, rgba(6,182,212,0.16) 0%, transparent 55%),
+                  radial-gradient(ellipse at 30% 35%, rgba(14,165,233,0.11) 0%, transparent 50%),
+                  radial-gradient(ellipse at 50% 85%, rgba(2,132,199,0.08) 0%, transparent 40%);
+      animation: oceanRipples 8s ease-in-out infinite alternate;
+    }
+    @keyframes oceanRipples {
+      0% { opacity: 0.6; transform: translateY(-5px); }
+      100% { opacity: 1.0; transform: translateY(5px); }
+    }
+
+    /* 5. Altar Flame (Sacred Holy Fire & Glowing Embers) */
     .anim-fire {
-      background: #0a0a0a;
+      background: radial-gradient(ellipse at 50% 100%, #090302 0%, #020101 100%);
     }
     .anim-fire::before {
-      content: '';
-      position: absolute; inset: 0;
-      background: radial-gradient(ellipse at 50% 100%, rgba(220,80,20,0.12) 0%, transparent 50%),
-                  radial-gradient(ellipse at 30% 90%, rgba(201,169,110,0.08) 0%, transparent 40%),
-                  radial-gradient(ellipse at 70% 95%, rgba(180,60,10,0.06) 0%, transparent 35%);
-      animation: fireFlicker 4s ease-in-out infinite alternate;
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 50% 100%, rgba(239,68,68,0.18) 0%, transparent 60%),
+                  radial-gradient(ellipse at 30% 95%, rgba(245,158,11,0.14) 0%, transparent 50%),
+                  radial-gradient(ellipse at 70% 95%, rgba(180,83,9,0.10) 0%, transparent 45%);
+      animation: firePulse 5s ease-in-out infinite alternate;
     }
-    @keyframes fireFlicker {
-      0%   { opacity: 0.7; transform: scaleY(1); }
-      50%  { opacity: 1; transform: scaleY(1.05); }
-      100% { opacity: 0.8; transform: scaleY(0.98); }
+    @keyframes firePulse {
+      0%   { opacity: 0.65; transform: scaleY(0.97); }
+      50%  { opacity: 1.0; transform: scaleY(1.06); }
+      100% { opacity: 0.75; transform: scaleY(1.0); }
+    }
+    .anim-fire::after {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(circle at 50% 85%, rgba(251,191,36,0.12) 0%, transparent 35%),
+                  radial-gradient(circle at 40% 70%, rgba(239,68,68,0.06) 0%, transparent 25%);
+      animation: emberShimmer 3.5s ease-in-out infinite alternate;
+    }
+    @keyframes emberShimmer {
+      0% { opacity: 0.5; transform: translateY(4px); }
+      100% { opacity: 0.95; transform: translateY(-6px); }
     }
 
     #stage {
@@ -178,7 +223,7 @@ const String tvHtmlContent = r'''
       width: 100%;
     }
     .verse-hi {
-      font-family: 'Tiro Devanagari Hindi', 'Crimson Pro', serif;
+      font-family: 'Crimson Pro', 'Tiro Devanagari Hindi', 'Nirmala UI', 'Mangal', Georgia, 'Times New Roman', serif;
       font-weight: 400;
       color: #ffffff;
       line-height: 1.5;
@@ -187,7 +232,7 @@ const String tvHtmlContent = r'''
       text-align: center;
     }
     .verse-en {
-      font-family: 'Crimson Pro', serif;
+      font-family: 'Crimson Pro', 'Tiro Devanagari Hindi', 'Nirmala UI', Georgia, 'Times New Roman', serif;
       font-weight: 300;
       font-style: italic;
       color: #ffffff;
@@ -197,7 +242,7 @@ const String tvHtmlContent = r'''
       text-align: center;
     }
     .verse-ref {
-      font-family: 'Cinzel', serif;
+      font-family: 'Cinzel', Georgia, 'Times New Roman', serif;
       font-weight: 700;
       color: var(--gold);
       letter-spacing: 0.35em;
@@ -1047,9 +1092,10 @@ const String tvHtmlContent = r'''
   // ── Font sizing ──
   function fontSize(content, base) {
     const total = ((content?.textHi?.length||0) + (content?.textEn?.length||0)) || content?.text?.length || 0;
-    const scale = total>350?0.5 : total>250?0.64 : total>160?0.78 : total>90?0.92 : 1;
+    const baseFs = Math.max(50, (base || 50));
+    const scale = total > 500 ? 0.74 : total > 350 ? 0.84 : total > 200 ? 0.94 : 1.15;
     const mobileFactor = isMobile() ? 0.7 : 1;
-    return Math.max(16, Math.round((base||44) * scale * mobileFactor));
+    return Math.max(26, Math.round(baseFs * scale * mobileFactor));
   }
 
   // ── Mobile font sizing for songs ──
@@ -1218,8 +1264,8 @@ const String tvHtmlContent = r'''
     }
 
     // Handle background: animated or image
-    const bgUrl = state.background?.url || '';
-    if (bgUrl.startsWith('animated:')) {
+    const bgUrl = state.background?.url;
+    if (bgUrl && bgUrl.startsWith('animated:')) {
       bgLayer.style.backgroundImage = '';
       bgLayer.style.opacity = '0';
       setAnimatedBg(bgUrl);
@@ -1227,11 +1273,15 @@ const String tvHtmlContent = r'''
       setAnimatedBg('');
       bgLayer.style.backgroundImage = 'url(' + bgUrl + ')';
       bgLayer.style.opacity = '0.45';
-    } else {
+    } else if (state.background === null || state.type === 'idle') {
       setAnimatedBg('');
       bgLayer.style.backgroundImage = '';
       bgLayer.style.opacity = '0';
     }
+
+    // Clean up any stray full-screen overlay image
+    const oldOverlay = document.getElementById('fullscreen-overlay-img');
+    if (oldOverlay) oldOverlay.remove();
 
     stage.innerHTML = '';
 
@@ -1282,12 +1332,14 @@ const String tvHtmlContent = r'''
       const enPx  = fsPx + 'px';
       const hasHi = !!c.textHi;
       const hasEn = !!c.textEn;
-      const maxW = mobile ? '100%' : '1400px';
+      const maxW = mobile ? '100%' : '1680px';
+      const isDevanagari = (s) => /[\u0900-\u097F]/.test(s || '');
+      const enStyle = isDevanagari(c.textEn) ? 'font-style:normal;' : 'font-style:italic;';
 
       stage.innerHTML = `
         <div class="verse-container fade-in" style="max-width:${maxW};width:100%">
           ${hasHi ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:${hasEn?'12px':'20px'}">${c.textHi}</p>` : ''}
-          ${hasEn ? `<p class="verse-en" style="font-size:${enPx};margin-bottom:16px">${c.textEn}</p>` : ''}
+          ${hasEn ? `<p class="verse-en" style="font-size:${enPx};${enStyle}margin-bottom:16px">${c.textEn}</p>` : ''}
           ${!hasHi && c.text ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:16px">"${c.text}"</p>` : ''}
           ${hasHi && hasEn ? `<div class="ornament">&#10022;</div>` : ''}
           <p class="verse-ref">${c.book || ''} ${c.chapter || ''}:${c.verse || ''}</p>
@@ -1298,7 +1350,10 @@ const String tvHtmlContent = r'''
       const c = state.content || {};
 
       if (c.image && c.showText === false) {
+        const oldOverlay = document.getElementById('fullscreen-overlay-img');
+        if (oldOverlay) oldOverlay.remove();
         const imgEl = document.createElement('img');
+        imgEl.id = 'fullscreen-overlay-img';
         imgEl.src = c.image;
         imgEl.style.cssText = 'width:100%;height:100%;object-fit:contain;position:fixed;inset:0;z-index:40;background:#000;';
         document.body.appendChild(imgEl);

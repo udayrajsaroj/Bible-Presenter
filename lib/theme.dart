@@ -19,13 +19,13 @@ final List<Map<String, String>> presetBackgrounds = [
   {'name': 'Dark Abstract', 'url': 'https://images.unsplash.com/photo-1509023464722-18d996393ca8?auto=format&fit=crop&q=80&w=1200'},
 ];
 
-// ── Animated backgrounds ──
+// ── Animated backgrounds (Dark motion themes with rich ambient effects) ──
 final List<Map<String, String>> animatedBackgrounds = [
-  {'name': 'Aurora', 'id': 'animated:aurora'},
-  {'name': 'Divine Light', 'id': 'animated:divine'},
-  {'name': 'Sunset Glow', 'id': 'animated:sunset'},
-  {'name': 'Ocean Deep', 'id': 'animated:ocean'},
-  {'name': 'Fire Altar', 'id': 'animated:fire'},
+  {'name': 'Celestial Nebula', 'id': 'animated:aurora'},
+  {'name': 'Divine Glory', 'id': 'animated:divine'},
+  {'name': 'Living Waters', 'id': 'animated:ocean'},
+  {'name': 'Altar Flame', 'id': 'animated:fire'},
+  {'name': 'Midnight Sanctuary', 'id': 'animated:sunset'},
 ];
 
 // ── Default slides ──

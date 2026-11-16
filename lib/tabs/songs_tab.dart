@@ -197,7 +197,7 @@ class SongsTab extends StatelessWidget {
                       if (isManual) ...[
                         const SizedBox(width: 4),
                         GestureDetector(
-                          onTap: () => onDeleteSong(i),
+                          onTap: () => onDeleteSong(allSongs.indexOf(song)),
                           child: Icon(Icons.delete_outline, size: 12, color: Colors.red.shade400),
                         ),
                       ],

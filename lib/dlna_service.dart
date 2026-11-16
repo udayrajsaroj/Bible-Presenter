@@ -45,7 +45,7 @@ class DlnaService extends ChangeNotifier {
 
   bool get isAndroid => Platform.isAndroid;
   bool get isScanning => _scanning;
-  bool get isConnected => connectedDevice != null && !rendererOffline;
+  bool get isConnected => connectedDevice != null;
 
   String? get connectedName => connectedDevice?.friendlyName;
 
@@ -107,6 +107,11 @@ class DlnaService extends ChangeNotifier {
       devices[i] = device;
     } else {
       devices.add(device);
+    }
+    // Auto-clear offline status if our connected TV was rediscovered
+    if (connectedDevice?.udn.value == device.udn.value && rendererOffline) {
+      connectedDevice = device;
+      rendererOffline = false;
     }
     notifyListeners();
   }
@@ -204,8 +209,8 @@ class DlnaService extends ChangeNotifier {
   /// metadata (object.item.imageItem.photo — best-supported media class
   /// across TV brands) followed by Play.
   Future<bool> castImage(String url, {String title = 'BiblePresenter'}) async {
-    final device = connectedDevice;
-    if (device == null || rendererOffline) return false;
+    var device = connectedDevice;
+    if (device == null) return false;
     try {
       await _api.setMediaUri(
         device.udn,
@@ -213,9 +218,31 @@ class DlnaService extends ChangeNotifier {
         ImageMetadata(title: title, upnpClass: 'object.item.imageItem.photo'),
       );
       await _api.play(device.udn);
+      if (rendererOffline) {
+        rendererOffline = false;
+        notifyListeners();
+      }
       return true;
     } catch (e) {
-      debugPrint('[Dlna] castImage failed: $e');
+      debugPrint('[Dlna] castImage attempt 1 failed: $e');
+      final revived = await pingStored(device.udn.value);
+      if (revived != null) {
+        connectedDevice = revived;
+        device = revived;
+        try {
+          await _api.setMediaUri(
+            device.udn,
+            Url(value: url),
+            ImageMetadata(title: title, upnpClass: 'object.item.imageItem.photo'),
+          );
+          await _api.play(device.udn);
+          rendererOffline = false;
+          notifyListeners();
+          return true;
+        } catch (e2) {
+          debugPrint('[Dlna] castImage retry failed: $e2');
+        }
+      }
       _markOffline();
       return false;
     }
@@ -224,8 +251,8 @@ class DlnaService extends ChangeNotifier {
   /// Sends a local video file; the TV's native player takes over playback,
   /// hardware decoding and its own remote's pause/seek.
   Future<bool> castVideo(String url, {String title = 'Video'}) async {
-    final device = connectedDevice;
-    if (device == null || rendererOffline) return false;
+    var device = connectedDevice;
+    if (device == null) return false;
     try {
       await _api.setMediaUri(
         device.udn,
@@ -233,9 +260,31 @@ class DlnaService extends ChangeNotifier {
         VideoMetadata(title: title, upnpClass: 'object.item.videoItem'),
       );
       await _api.play(device.udn);
+      if (rendererOffline) {
+        rendererOffline = false;
+        notifyListeners();
+      }
       return true;
     } catch (e) {
-      debugPrint('[Dlna] castVideo failed: $e');
+      debugPrint('[Dlna] castVideo attempt 1 failed: $e');
+      final revived = await pingStored(device.udn.value);
+      if (revived != null) {
+        connectedDevice = revived;
+        device = revived;
+        try {
+          await _api.setMediaUri(
+            device.udn,
+            Url(value: url),
+            VideoMetadata(title: title, upnpClass: 'object.item.videoItem'),
+          );
+          await _api.play(device.udn);
+          rendererOffline = false;
+          notifyListeners();
+          return true;
+        } catch (e2) {
+          debugPrint('[Dlna] castVideo retry failed: $e2');
+        }
+      }
       _markOffline();
       return false;
     }
@@ -280,8 +329,7 @@ class DlnaService extends ChangeNotifier {
     }
   }
 
-  bool get _canControl =>
-      isAndroid && connectedDevice != null && !rendererOffline;
+  bool get _canControl => isAndroid && connectedDevice != null;
 
   @override
   void dispose() {

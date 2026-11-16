@@ -75,8 +75,10 @@ class ScheduleState extends ChangeNotifier {
     if (_scheduleStanzaIndex != index && _activeScheduleIndex >= 0) {
       final songs = _schedules[_activeScheduleIndex]['songs'] as List? ?? [];
       if (_scheduleSongIndex < songs.length) {
-        final stanzas =
-            songs[_scheduleSongIndex]['stanzas'] as List<String>? ?? [];
+        final rawStanzas = songs[_scheduleSongIndex]['stanzas'];
+        final stanzas = rawStanzas is List
+            ? List<String>.from(rawStanzas)
+            : <String>[];
         if (stanzas.isEmpty) {
           _scheduleStanzaIndex = 0;
           notifyListeners();
@@ -101,7 +103,17 @@ class ScheduleState extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final str = prefs.getString('song_schedules') ?? '[]';
       final List<dynamic> data = jsonDecode(str) as List<dynamic>;
-      _schedules = data.cast<Map<String, dynamic>>();
+      _schedules = data.map((item) {
+        final map = Map<String, dynamic>.from(item as Map);
+        final songs = (map['songs'] as List? ?? []).map((s) {
+          final sMap = Map<String, dynamic>.from(s as Map);
+          sMap['stanzas'] =
+              List<String>.from(sMap['stanzas'] as List? ?? []);
+          return sMap;
+        }).toList();
+        map['songs'] = songs;
+        return map;
+      }).toList();
       notifyListeners();
     } catch (_) {
       _schedules = [];

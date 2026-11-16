@@ -1,6 +1,8 @@
 package com.biblepresenter
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -81,7 +83,7 @@ class MethodChannelHandler(private val context: android.content.Context) : Metho
             result.success("granted")
             return
         }
-        val activity = PermissionActivity.activityInstance
+        val activity: Activity? = (context as? Activity) ?: PermissionActivity.activityInstance
         if (activity == null) {
             result.error(
                 "NO_ACTIVITY",

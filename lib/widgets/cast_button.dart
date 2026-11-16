@@ -72,7 +72,7 @@ class CastButton extends StatelessWidget {
                   Icon(icon, size: 18, color: color),
                 const SizedBox(width: 6),
                 Text(
-                  isConnected ? castService.connectedDeviceName : 'Cast',
+                  isConnected ? castService.connectedDeviceName : 'Chromecast',
                   style: TextStyle(
                     color: isConnected ? kAccent : kMuted,
                     fontSize: 11,
