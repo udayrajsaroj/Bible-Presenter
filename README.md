@@ -27,6 +27,12 @@ BiblePresenter turns your Android phone into a church presentation controller. I
 - Add custom songs with multiple stanzas
 - Stanza-by-stanza casting with dot indicators
 - **Song Schedules** — create schedules for services, add songs, and present them in order
+- **Word import/export** — import songs from `.docx` files and export any
+  song to Word (title heading, one paragraph per slide line, blank line
+  between slides, `[Chorus]` labels bold)
+- **Slide editor** — PowerPoint-style full screen: drag ⠿ to reorder slides,
+  duplicate a slide, edit slide text, preview any edited slide on the TV
+  before saving; asset songs save as editable copies, manual songs save in place
 
 ### 📂 Files (PDF / PPT)
 - Upload PDF and PPT/PPTX files from phone

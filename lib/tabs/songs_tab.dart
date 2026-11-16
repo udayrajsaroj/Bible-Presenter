@@ -10,9 +10,13 @@ class SongsTab extends StatelessWidget {
   final int selectedSongIndex;
   final int selectedStanzaIndex;
   final TextEditingController songSearchCtrl;
+  final bool importingWord;
   final void Function(String query) onFilterSongs;
   final VoidCallback onShowAddSongModal;
   final VoidCallback onShowCreateScheduleModal;
+  final VoidCallback onImportWord;
+  final VoidCallback onExportWord;
+  final VoidCallback onEditSlides;
   final void Function(int idx) onDeleteSong;
   final void Function(int idx) onSelectSong;
   final void Function(int idx) onSelectStanza;
@@ -38,9 +42,13 @@ class SongsTab extends StatelessWidget {
     required this.selectedSongIndex,
     required this.selectedStanzaIndex,
     required this.songSearchCtrl,
+    required this.importingWord,
     required this.onFilterSongs,
     required this.onShowAddSongModal,
     required this.onShowCreateScheduleModal,
+    required this.onImportWord,
+    required this.onExportWord,
+    required this.onEditSlides,
     required this.onDeleteSong,
     required this.onSelectSong,
     required this.onSelectStanza,
@@ -142,6 +150,22 @@ class SongsTab extends StatelessWidget {
           )),
           const SizedBox(width: 8),
           GestureDetector(
+            onTap: importingWord ? null : onImportWord,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade900.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.blue.shade800.withOpacity(0.4)),
+              ),
+              child: importingWord
+                  ? const SizedBox(width: 16, height: 16,
+                      child: CircularProgressIndicator(color: Colors.blue, strokeWidth: 2))
+                  : const Icon(Icons.upload_file, size: 18, color: Colors.blue),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
             onTap: onOpenFullscreen,
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
@@ -207,6 +231,46 @@ class SongsTab extends StatelessWidget {
               },
             ),
           ),
+
+        // Selected-song actions: slide editor + Word export
+        if (selectedSong != null) ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: GestureDetector(
+              onTap: onEditSlides,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                decoration: BoxDecoration(
+                  color: kAccent.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: kAccent.withOpacity(0.4)),
+                ),
+                child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Icons.auto_awesome_motion, size: 15, color: kAccent),
+                  SizedBox(width: 6),
+                  Text('Edit Slides', style: TextStyle(color: kAccent, fontSize: 12, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: GestureDetector(
+              onTap: onExportWord,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade900.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.blue.shade800.withOpacity(0.4)),
+                ),
+                child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Icons.description, size: 15, color: Colors.blue),
+                  SizedBox(width: 6),
+                  Text('Export Word', style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            )),
+          ]),
+        ],
 
         const SizedBox(height: 10),
 
