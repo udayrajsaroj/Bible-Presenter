@@ -2220,17 +2220,25 @@ class _ControllerPageState extends State<ControllerPage>
   }
 
   void _openPdfPresenter() {
-    if (_tvState['type'] != 'pdf') {
+    String? localP = _currentPdfLocalPath.isNotEmpty ? _currentPdfLocalPath : null;
+    String name = 'Document';
+    if (_tvState['type'] == 'pdf' && _tvState['content'] is Map) {
+      name = (_tvState['content'] as Map)['name'] as String? ?? name;
+      localP ??= (_tvState['content'] as Map)['_localPdfPath'] as String?;
+    }
+    if (localP == null && _activeFileIndex >= 0 && _activeFileIndex < _uploadedFiles.length) {
+      final f = _uploadedFiles[_activeFileIndex];
+      name = f['name'] as String? ?? name;
+      localP = f['localPath'] as String?;
+    }
+    if (_tvState['type'] != 'pdf' && localP == null) {
       _showSnack('Cast a PDF first — then control it live here!', error: true);
       return;
     }
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => PdfPresenterScreen(
-        fileName: (_tvState['content'] as Map?)?['name'] as String? ??
-            'Document',
-        localPath: _currentPdfLocalPath.isEmpty
-            ? null
-            : _currentPdfLocalPath,
+        fileName: name,
+        localPath: localP,
         initialPage: _pdfCurrentPage,
         reportedTotalPages: _pdfTotalPages,
         tvState: tvStateN,
@@ -2242,10 +2250,10 @@ class _ControllerPageState extends State<ControllerPage>
   }
 
   /// Casts a picked file; PDFs additionally open the live presenter screen.
-  void _castFileAndPresent(int idx) {
+  Future<void> _castFileAndPresent(int idx) async {
     final isPdf = (_uploadedFiles[idx]['type'] as String? ?? '') == 'pdf';
-    _castFile(idx);
-    if (isPdf) _openPdfPresenter();
+    await _castFile(idx);
+    if (isPdf && mounted) _openPdfPresenter();
   }
 
   // ══════════════════ SCHEDULE DETAIL OPENER ══════════════════
