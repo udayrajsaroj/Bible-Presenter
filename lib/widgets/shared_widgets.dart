@@ -199,15 +199,22 @@ Widget infoRow(String label, String value, Color valueColor) => Padding(
   ]),
 );
 
-Widget castStep(String num, String text) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-  Container(
-    width: 18, height: 18,
-    decoration: BoxDecoration(color: kAccent.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(5)),
-    child: Center(child: Text(num, style: const TextStyle(fontSize: 9, color: kAccent, fontWeight: FontWeight.bold))),
-  ),
-  const SizedBox(width: 8),
-  Expanded(child: Text(text, style: const TextStyle(fontSize: 10, color: kMuted, height: 1.4))),
-]);
+Widget castStep(String num, String text) => Padding(
+  padding: const EdgeInsets.only(bottom: 6),
+  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Container(
+      width: 20, height: 20,
+      decoration: BoxDecoration(
+        color: kAccent.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: kAccent.withValues(alpha: 0.4)),
+      ),
+      child: Center(child: Text(num, style: const TextStyle(fontSize: 10, color: kAccent, fontWeight: FontWeight.bold))),
+    ),
+    const SizedBox(width: 10),
+    Expanded(child: Text(text, style: const TextStyle(fontSize: 11, color: Color(0xFFCBD5E1), height: 1.4))),
+  ]),
+);
 
 Widget castFileBtn(String label, VoidCallback onTap) => Material(
   color: Colors.transparent,

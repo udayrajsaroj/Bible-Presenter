@@ -873,36 +873,108 @@ class _ControllerPageState extends State<ControllerPage>
 
   void _showCastDialog() {
     final tvUrl =
-        'http://${_deviceIp == '...' ? '<DEVICE_IP>' : _deviceIp}:3000/tv.html';
+        'http://${_deviceIp == '...' ? '<DEVICE_IP>' : _deviceIp}:${SlideRenderer.serverPort}/tv.html';
     showModalBottomSheet(
       context: context,
       backgroundColor: kBg3,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
-        child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                const Text('Cast to TV',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: kText)),
-                IconButton(
-                    icon: const Icon(Icons.close, color: kMuted),
-                    onPressed: () => Navigator.pop(context)),
-              ]),
-              const SizedBox(height: 16),
+      builder: (_) => SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.88,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: kMuted.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  const Text('Cast to TV',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: kText)),
+                  IconButton(
+                      icon: const Icon(Icons.close, color: kMuted),
+                      onPressed: () => Navigator.pop(context)),
+                ]),
+                const SizedBox(height: 14),
 
-              // ── TV Direct (DLNA) — the zero-setup path (plan 9.1) ──
-              if (_dlna.isAndroid)
+                // ── TV Direct (DLNA) — the zero-setup path (plan 9.1) ──
+                if (_dlna.isAndroid)
+                  GestureDetector(
+                    onTap: () {
+                      // Pre-warm discovery before the sheet opens.
+                      _dlna.scan();
+                      showModalBottomSheet(
+                        context: context,
+                        backgroundColor: kBg3,
+                        shape: const RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.vertical(top: Radius.circular(20))),
+                        isScrollControlled: true,
+                        builder: (_) => DlnaPickerSheet(
+                          onUseBrowserConnect: _copyUrl,
+                          onDeviceSelected: (_) => _castCurrentToDlna(),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                          color: kAccent.withOpacity(0.14),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: kAccent.withOpacity(0.55), width: 1.5)),
+                      child: Row(children: [
+                        Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                                color: kAccent.withOpacity(0.18),
+                                borderRadius: BorderRadius.circular(10)),
+                            child: const Icon(Icons.tv, size: 22, color: kAccent)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                              const Text('TV Direct',
+                                  style: TextStyle(
+                                      color: kText,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 2),
+                              const Text(
+                                  'Cast to any Smart TV — no app, no URL',
+                                  style: TextStyle(color: kMuted, fontSize: 10))
+                            ])),
+                        const Icon(Icons.chevron_right, color: kMuted, size: 20),
+                      ]),
+                    ),
+                  ),
+                if (_dlna.isAndroid) const SizedBox(height: 10),
+
+                // ── Chromecast / AirPlay (Pigeon-native) ──
                 GestureDetector(
                   onTap: () {
-                    // Pre-warm discovery before the sheet opens.
-                    _dlna.scan();
+                    Navigator.pop(context);
+                    // Open the CastButton's device picker sheet
                     showModalBottomSheet(
                       context: context,
                       backgroundColor: kBg3,
@@ -910,211 +982,160 @@ class _ControllerPageState extends State<ControllerPage>
                           borderRadius:
                               BorderRadius.vertical(top: Radius.circular(20))),
                       isScrollControlled: true,
-                      builder: (_) => DlnaPickerSheet(
-                        onUseBrowserConnect: _copyUrl,
-                        onDeviceSelected: (_) => _castCurrentToDlna(),
-                      ),
+                      builder: (_) =>
+                          CastButton(castService: _castService, tvUrl: tvUrl),
                     );
                   },
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                        color: kAccent.withOpacity(0.14),
+                        color: Colors.blue.shade900.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                            color: kAccent.withOpacity(0.55), width: 1.5)),
+                            color: Colors.blue.shade600.withOpacity(0.4))),
                     child: Row(children: [
                       Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                              color: kAccent.withOpacity(0.18),
+                              color: Colors.blue.shade600.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(10)),
-                          child: const Icon(Icons.tv, size: 22, color: kAccent)),
+                          child: const Icon(Icons.cast,
+                              size: 22, color: Colors.blue)),
                       const SizedBox(width: 12),
                       Expanded(
                           child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                            const Text('TV Direct',
+                            const Text('Chromecast / AirPlay',
                                 style: TextStyle(
                                     color: kText,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold)),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600)),
                             const SizedBox(height: 2),
-                            const Text(
-                                'Cast to any Smart TV — no app, no URL',
+                            Text('Native cast — discover & connect to devices',
                                 style: TextStyle(color: kMuted, fontSize: 10))
                           ])),
                       const Icon(Icons.chevron_right, color: kMuted, size: 20),
                     ]),
                   ),
                 ),
-              const SizedBox(height: 10),
+                const SizedBox(height: 10),
 
-              // ── Chromecast / AirPlay (Pigeon-native) ──
-              GestureDetector(
-                onTap: () {
-                  Navigator.pop(context);
-                  // Open the CastButton's device picker sheet
-                  showModalBottomSheet(
-                    context: context,
-                    backgroundColor: kBg3,
-                    shape: const RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.vertical(top: Radius.circular(20))),
-                    isScrollControlled: true,
-                    builder: (_) =>
-                        CastButton(castService: _castService, tvUrl: tvUrl),
-                  );
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                      color: Colors.blue.shade900.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: Colors.blue.shade600.withOpacity(0.4))),
-                  child: Row(children: [
-                    Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                            color: Colors.blue.shade600.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(10)),
-                        child: const Icon(Icons.cast,
-                            size: 22, color: Colors.blue)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                          const Text('Chromecast / AirPlay',
-                              style: TextStyle(
-                                  color: kText,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 2),
-                          Text('Native cast — discover & connect to devices',
-                              style: TextStyle(color: kMuted, fontSize: 10))
-                        ])),
-                    const Icon(Icons.chevron_right, color: kMuted, size: 20),
-                  ]),
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              // ── Screen Mirror (Miracast) ──
-              GestureDetector(
-                onTap: () {
-                  Navigator.pop(context);
-                  _toggleFullScreen();
-                  _openScreenMirrorSettings();
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                      color: kAccent.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: kAccent.withOpacity(0.4))),
-                  child: Row(children: [
-                    Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                            color: kAccent.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(10)),
-                        child: const Icon(Icons.screen_share_outlined,
-                            size: 22, color: kAccent)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                          const Text('Screen Mirror',
-                              style: TextStyle(
-                                  color: kText,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 2),
-                          Text('Mirror your phone screen to TV (Miracast)',
-                              style: TextStyle(color: kMuted, fontSize: 10))
-                        ])),
-                    const Icon(Icons.chevron_right, color: kMuted, size: 20),
-                  ]),
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              // ── Browser Connect ──
-              GestureDetector(
-                onTap: () {
-                  Navigator.pop(context);
-                  _copyUrl();
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                      color: Colors.orange.shade900.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: Colors.orange.shade800.withOpacity(0.4))),
-                  child: Row(children: [
-                    Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                            color: Colors.orange.shade900.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(10)),
-                        child: Icon(Icons.cast,
-                            size: 22, color: Colors.orange.shade400)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                          const Text('Browser Connect',
-                              style: TextStyle(
-                                  color: kText,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 2),
-                          Text('Open the URL in TV browser',
-                              style: TextStyle(color: kMuted, fontSize: 10))
-                        ])),
-                    const Icon(Icons.chevron_right, color: kMuted, size: 20),
-                  ]),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                    color: kBg.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: kBorder.withOpacity(0.5))),
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('HOW IT WORKS:',
-                          style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: kGold,
-                              letterSpacing: 1.5)),
-                      const SizedBox(height: 8),
-                      castStep('1',
-                          'Chromecast/AirPlay → Native cast directly to your TV'),
-                      const SizedBox(height: 4),
-                      castStep('2',
-                          'Screen Mirror → App will enter fullscreen + open cast settings'),
-                      const SizedBox(height: 4),
-                      castStep('3',
-                          'Browser Connect → Copy URL and open in TV browser'),
+                // ── Screen Mirror (Miracast) ──
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pop(context);
+                    _toggleFullScreen();
+                    _openScreenMirrorSettings();
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                        color: kAccent.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: kAccent.withOpacity(0.4))),
+                    child: Row(children: [
+                      Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                              color: kAccent.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(10)),
+                          child: const Icon(Icons.screen_share_outlined,
+                              size: 22, color: kAccent)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            const Text('Screen Mirror',
+                                style: TextStyle(
+                                    color: kText,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 2),
+                            Text('Mirror your phone screen to TV (Miracast)',
+                                style: TextStyle(color: kMuted, fontSize: 10))
+                          ])),
+                      const Icon(Icons.chevron_right, color: kMuted, size: 20),
                     ]),
-              ),
-            ]),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // ── Browser Connect ──
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pop(context);
+                    _copyUrl();
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                        color: Colors.orange.shade900.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: Colors.orange.shade800.withOpacity(0.4))),
+                    child: Row(children: [
+                      Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                              color: Colors.orange.shade900.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(10)),
+                          child: Icon(Icons.cast,
+                              size: 22, color: Colors.orange.shade400)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            const Text('Browser Connect',
+                                style: TextStyle(
+                                    color: kText,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 2),
+                            Text('Open the URL in TV browser',
+                                style: TextStyle(color: kMuted, fontSize: 10))
+                          ])),
+                      const Icon(Icons.chevron_right, color: kMuted, size: 20),
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                      color: kBg.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: kBorder)),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('HOW IT WORKS:',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: kGold,
+                                letterSpacing: 1.5)),
+                        const SizedBox(height: 10),
+                        castStep('1',
+                            'TV Direct (Recommended) → Zero setup. Casts directly to Smart TVs & Kodi on Wi-Fi without needing an app or URL.'),
+                        castStep('2',
+                            'Chromecast / AirPlay → Native cast directly to your Google Cast or Apple AirPlay devices.'),
+                        castStep('3',
+                            'Screen Mirror → Enters fullscreen & opens phone Miracast/casting settings to mirror whole screen.'),
+                        castStep('4',
+                            'Browser Connect → Copies local presentation URL to open in any TV web browser.'),
+                      ]),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
