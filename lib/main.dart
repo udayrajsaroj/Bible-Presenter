@@ -1526,6 +1526,27 @@ class _ControllerPageState extends State<ControllerPage>
           bibleState.selectedVerse = prevVList.last;
           _castVerse();
         }
+      } else {
+        // Book boundary: previous book's last chapter, last verse
+        final books = bibleState.bible.keys.toList();
+        final bIdx = books.indexOf(bibleState.selectedBook);
+        if (bIdx > 0) {
+          final prevBook = books[bIdx - 1];
+          bibleState.selectedBook = prevBook;
+          final lastChs =
+              (bibleState.bible[prevBook] ?? {}).keys.toList()..sort();
+          if (lastChs.isNotEmpty) {
+            bibleState.selectedChapter = lastChs.last;
+            final lastVs = (bibleState.bible[prevBook]?[lastChs.last] ?? {})
+                .keys
+                .toList()
+              ..sort();
+            if (lastVs.isNotEmpty) {
+              bibleState.selectedVerse = lastVs.last;
+            }
+          }
+          _castVerse();
+        }
       }
     }
   }
@@ -1553,6 +1574,15 @@ class _ControllerPageState extends State<ControllerPage>
               ..sort();
         if (nextVList.isNotEmpty) {
           bibleState.selectedVerse = nextVList.first;
+          _castVerse();
+        }
+      } else {
+        // Book boundary: advance to next book's first chapter, first verse
+        final books = bibleState.bible.keys.toList();
+        final bIdx = books.indexOf(bibleState.selectedBook);
+        if (bIdx < books.length - 1 && bIdx >= 0) {
+          final nextBook = books[bIdx + 1];
+          bibleState.selectedBook = nextBook;
           _castVerse();
         }
       }
