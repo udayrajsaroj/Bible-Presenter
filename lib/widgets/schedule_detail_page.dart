@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
+import 'top_notification.dart';
 
 class ScheduleDetailPage extends StatefulWidget {
   final Map<String, dynamic> schedule;
@@ -287,13 +288,7 @@ class _ScheduleDetailPageState extends State<ScheduleDetailPage> {
                 onTap: () {
                   widget.onAddSong(actualIdx);
                   setState(() {});
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text('${song['title'] ?? ''} added!',
-                        style: const TextStyle(fontSize: 12)),
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                    backgroundColor: Colors.purple.shade700,
-                  ));
+                  TopNotification.show(context, '${song['title'] ?? ''} added!');
                 },
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 3),

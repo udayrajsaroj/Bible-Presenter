@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/shared_widgets.dart';
+import 'top_notification.dart';
 
 /// Full-screen song slide editor — reorder slides by dragging, duplicate a
 /// slide, edit its text, preview any slide on the TV. Works on a local copy;
@@ -113,15 +114,13 @@ class _SongSlideEditorScreenState extends State<SongSlideEditorScreen> {
   Future<void> _save() async {
     if (_saving) return;
     if (_titleCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Give the song a title first'),
-          backgroundColor: Colors.red));
+      TopNotification.show(context, 'Give the song a title first',
+          isError: true);
       return;
     }
     if (_stanzas.every((s) => s.trim().isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('The song has no slide text'),
-          backgroundColor: Colors.red));
+      TopNotification.show(context, 'The song has no slide text',
+          isError: true);
       return;
     }
     setState(() => _saving = true);

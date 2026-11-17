@@ -40,6 +40,7 @@ import 'widgets/cast_button.dart';
 import 'state/bible_state.dart';
 import 'state/song_state.dart';
 import 'state/schedule_state.dart';
+import 'widgets/top_notification.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,6 +68,17 @@ class BiblePresenterApp extends StatelessWidget {
             scaffoldBackgroundColor: kBg,
             colorScheme:
                 const ColorScheme.dark(primary: kAccent, surface: kBg2),
+            snackBarTheme: SnackBarThemeData(
+              backgroundColor: kBg3,
+              contentTextStyle: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
           ),
           home: const ControllerPage(),
         ),
@@ -2122,19 +2134,13 @@ class _ControllerPageState extends State<ControllerPage>
   void _copyUrl() {
     Clipboard.setData(ClipboardData(
         text:
-            'http://${_deviceIp == '...' ? '<DEVICE_IP>' : _deviceIp}:3000/tv.html'));
+            'http://${_deviceIp == '...' ? '<DEVICE_IP>' : _deviceIp}:${SlideRenderer.serverPort}/tv.html'));
     _showSnack('URL copied!');
   }
 
   void _showSnack(String msg, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: error ? Colors.red.shade800 : kBg3,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      duration: const Duration(seconds: 2),
-    ));
+    TopNotification.show(context, msg, isError: error);
   }
 
   // ══════════════════ SECTION FULLSCREEN OPENERS ══════════════════
