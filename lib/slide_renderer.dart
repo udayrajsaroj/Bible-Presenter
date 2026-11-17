@@ -434,7 +434,7 @@ class SlideRenderer {
     }
 
     final double maxWidth = slideSize.width - 240; // 1680px — leaves 120px safe padding from borders
-    const double maxHeight = 800; // leaves 140px safe margin top and bottom
+    const double maxHeight = 730; // leaves space for top reference + safe margins
 
     double probe(double size) {
       final tp = TextPainter(
@@ -453,10 +453,10 @@ class SlideRenderer {
       return h;
     }
 
-    // Binary search for largest font size that fills available space without touching borders
+    // Binary search for largest font size that fills available space (6 iterations is accurate to <1px)
     double lo = 28.0;
     double hiSize = (base * 1.5).clamp(58.0, 72.0);
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 6; i++) {
       final mid = (lo + hiSize) / 2;
       if (probe(mid) <= maxHeight) {
         lo = mid;
@@ -481,29 +481,34 @@ class SlideRenderer {
           ),
         );
 
+    final ref = '${c['book'] ?? ''} ${c['chapter'] ?? ''}:${c['verse'] ?? ''}'
+        .trim()
+        .toUpperCase();
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (ref.isNotEmpty) ...[
+          Text(
+            ref,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: _gold,
+              fontSize: 36,
+              letterSpacing: 6,
+              fontWeight: FontWeight.w700,
+              fontFamilyFallback: ['serif'],
+              shadows: [Shadow(color: Color(0x66c9a96e), blurRadius: 30)],
+            ),
+          ),
+          const SizedBox(height: 28),
+        ],
         if (hi.isNotEmpty) text(hi),
         if (hi.isNotEmpty && en.isNotEmpty)
           const _Ornament(),
         if (en.isNotEmpty) text('"$en"', italic: true),
         if (hi.isEmpty && en.isEmpty && fallback.isNotEmpty)
           text('"$fallback"'),
-        const SizedBox(height: 24),
-        Text(
-          '${c['book'] ?? ''} ${c['chapter'] ?? ''}:${c['verse'] ?? ''}'
-              .toUpperCase(),
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: _gold,
-            fontSize: 22,
-            letterSpacing: 6,
-            fontWeight: FontWeight.w700,
-            fontFamilyFallback: ['serif'],
-            shadows: [Shadow(color: Color(0x66c9a96e), blurRadius: 30)],
-          ),
-        ),
       ],
     );
   }

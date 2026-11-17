@@ -247,9 +247,10 @@ const String tvHtmlContent = r'''
       color: var(--gold);
       letter-spacing: 0.35em;
       text-transform: uppercase;
-      font-size: clamp(13px, 1.6vw, 22px);
-      text-shadow: 0 0 30px rgba(201,169,110,0.4);
+      font-size: clamp(20px, 2.2vw, 36px);
+      text-shadow: 0 0 30px rgba(201,169,110,0.5);
       text-align: center;
+      margin-bottom: 24px;
     }
 
     /* ── Song specific styles ── */
@@ -1350,11 +1351,11 @@ const String tvHtmlContent = r'''
 
       stage.innerHTML = `
         <div class="verse-container fade-in" style="max-width:${maxW};width:100%">
+          <p class="verse-ref">${c.book || ''} ${c.chapter || ''}:${c.verse || ''}</p>
           ${hasHi ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:${hasEn?'12px':'20px'}">${c.textHi}</p>` : ''}
           ${hasHi && hasEn ? `<div class="ornament">&#10022;</div>` : ''}
           ${hasEn ? `<p class="verse-en" style="font-size:${enPx};${enStyle}margin-bottom:16px">${c.textEn}</p>` : ''}
           ${!hasHi && c.text ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:16px">"${c.text}"</p>` : ''}
-          <p class="verse-ref">${c.book || ''} ${c.chapter || ''}:${c.verse || ''}</p>
         </div>`;
 
     } else if (state.type === 'slide') {

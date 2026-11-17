@@ -343,7 +343,38 @@ class OutputRouter {
 
   // ── Cache helpers ──
 
-  String stateKey(Map<String, dynamic> state) => jsonEncode(state);
+  String stateKey(Map<String, dynamic> state) {
+    final type = state['type'] as String? ?? 'idle';
+    final content =
+        Map<String, dynamic>.from(state['content'] as Map? ?? {});
+    final bg = (state['background'] as Map?)?['url'] as String? ??
+        (content['background'] as Map?)?['url'] as String? ??
+        '';
+
+    if (type == 'verse') {
+      final book = content['book'] ?? '';
+      final ch = content['chapter'] ?? '';
+      final vs = content['verse'] ?? '';
+      final fs = content['fontSize'] ?? 44;
+      return 'verse:$book:$ch:$vs:$fs:$bg';
+    } else if (type == 'song') {
+      final title = content['title'] ?? '';
+      final stanza = content['currentStanza'] ?? 0;
+      final fs = content['fontSize'] ?? 44;
+      return 'song:$title:$stanza:$fs:$bg';
+    } else if (type == 'slide') {
+      final title = content['title'] ?? '';
+      final text = content['text'] ?? '';
+      final fs = content['fontSize'] ?? 44;
+      return 'slide:$title:$text:$fs:$bg';
+    } else if (type == 'logo') {
+      return 'logo:$bg';
+    } else if (type == 'welcome') {
+      final msg = content['message'] ?? '';
+      return 'welcome:$msg:$bg';
+    }
+    return jsonEncode(state);
+  }
 
   void _store(String key, Uint8List png) {
     if (_cache.containsKey(key)) return;

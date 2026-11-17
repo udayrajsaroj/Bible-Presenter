@@ -2908,23 +2908,14 @@ class _ControllerPageState extends State<ControllerPage>
       backgroundColor: kBg,
       body: SafeArea(
         bottom: false,
-        child: Stack(children: [
-          Column(children: [
-            // Top chrome (AppBar + TabBar) — collapses on scroll-down or
-            // Focus Mode, restores on scroll-up / tap (200ms ease).
-            ClipRect(
-              child: AnimatedSize(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOut,
-                child: _chromeVisible
-                    ? Column(children: [_buildAppBar(), _buildTabBar()])
-                    : _chromeStrip(showBottomHandle: false),
-              ),
-            ),
-            Expanded(
-              child: NotificationListener<ScrollNotification>(
-                onNotification: _onScrollNotification,
-                child: TabBarView(
+        child: Column(children: [
+          // Header (AppBar + TabBar) — always visible so tabs are always accessible.
+          _buildAppBar(),
+          _buildTabBar(),
+          Expanded(
+            child: NotificationListener<ScrollNotification>(
+              onNotification: _onScrollNotification,
+              child: TabBarView(
             controller: _tabController,
             children: [
               SlidesTab(
@@ -3086,8 +3077,8 @@ class _ControllerPageState extends State<ControllerPage>
           ),
               ),
             ),
-            // Bottom chrome (DLNA banner + URL bar) — collapses together
-            // with the top bars for a full-height content stage.
+            // Bottom chrome (DLNA banner + URL bar) — collapses on scroll-down
+            // or Focus Mode to maximize the content stage.
             ClipRect(
               child: AnimatedSize(
                 duration: const Duration(milliseconds: 200),
@@ -3098,13 +3089,9 @@ class _ControllerPageState extends State<ControllerPage>
               ),
             ),
           ]),
-          // Floating restore pill — the way back out of Focus Mode.
-          if (!_chromeVisible)
-            Positioned(top: 8, right: 10, child: _focusExitPill()),
-        ]),
-      ),
-    );
-  }
+        ),
+      );
+    }
 
   // ══════════════════ COLLAPSIBLE CHROME / FOCUS MODE ══════════════════
 
@@ -3134,7 +3121,7 @@ class _ControllerPageState extends State<ControllerPage>
   void _toggleFocusMode() {
     if (_chromeVisible) {
       _hideChrome(focus: true);
-      _showSnack('Focus mode — tap CONTROLS to bring the bars back');
+      _showSnack('Bottom bar hidden — tap bottom strip to restore');
     } else {
       _showChrome();
     }

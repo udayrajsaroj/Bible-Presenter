@@ -184,6 +184,22 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: kAccent.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: kAccent.withOpacity(0.4)),
+                    ),
+                    child: Text(ref,
+                        style: const TextStyle(
+                            color: kAccent,
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(height: 18),
                   if (primary.isNotEmpty)
                     Text(
                       primary,
@@ -217,22 +233,6 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
                         fontStyle: FontStyle.italic,
                       ),
                     ),
-                  const SizedBox(height: 34),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: kAccent.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: kAccent.withOpacity(0.4)),
-                    ),
-                    child: Text(ref,
-                        style: const TextStyle(
-                            color: kAccent,
-                            fontSize: 13,
-                            fontFamily: 'monospace',
-                            fontWeight: FontWeight.bold)),
-                  ),
                 ]),
               ),
             ),
