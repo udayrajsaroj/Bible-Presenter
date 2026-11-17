@@ -469,13 +469,13 @@ const String tvHtmlContent = r'''
       animation: pulse-dot 3s ease-in-out infinite;
     }
 
-    /* ── Fade-in animation (CHANGE #6: improved) ── */
+    /* ── Fade-in animation (instant snappy verse transition) ── */
     .fade-in {
-      animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      animation: fadeInSnap 0.12s ease-out forwards;
     }
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(18px); }
-      to   { opacity: 1; transform: translateY(0); }
+    @keyframes fadeInSnap {
+      from { opacity: 0; }
+      to   { opacity: 1; }
     }
 
     /* ── State transition helper ── */
@@ -1096,13 +1096,21 @@ const String tvHtmlContent = r'''
     document.getElementById('status-text').textContent = online ? 'Online' : 'Reconnecting...';
   }
 
-  // ── Font sizing ──
+  // ── Font sizing: analytical fit avoiding runtime DOM reflow loops ──
   function fontSize(content, base) {
-    const total = ((content?.textHi?.length||0) + (content?.textEn?.length||0)) || content?.text?.length || 0;
-    const baseFs = Math.max(50, (base || 50));
-    const scale = total > 500 ? 0.74 : total > 350 ? 0.84 : total > 200 ? 0.94 : 1.15;
+    const hiLen = content?.textHi?.length || 0;
+    const enLen = content?.textEn?.length || 0;
+    const total = (hiLen + enLen) || (content?.text?.length || 0);
+    const both = hiLen > 0 && enLen > 0;
+    const baseFs = Math.max(40, (base || 48));
+    let scale = 1.0;
+    if (both) {
+      scale = total > 500 ? 0.60 : total > 350 ? 0.70 : total > 220 ? 0.80 : total > 120 ? 0.92 : 1.05;
+    } else {
+      scale = total > 400 ? 0.68 : total > 250 ? 0.80 : total > 140 ? 0.92 : 1.12;
+    }
     const mobileFactor = isMobile() ? 0.7 : 1;
-    return Math.max(26, Math.round(baseFs * scale * mobileFactor));
+    return Math.max(20, Math.round(baseFs * scale * mobileFactor));
   }
 
   // ── Mobile font sizing for songs ──
@@ -1112,36 +1120,24 @@ const String tvHtmlContent = r'''
     return Math.max(14, Math.round((base || 44) * scale * mobileFactor));
   }
 
-  // ── Auto-fit: shrink rendered text until the stage stops overflowing ──
-  // The count-based fontSize() estimate can still overflow for long verses;
-  // this measures the real layout and steps the font down so the largest
-  // readable size always fits the screen. Covers verse, song, slide and
-  // welcome text alike.
+  // ── Auto-fit: single-pass proportional scaling to eliminate DOM reflow loops ──
   function fitStageText() {
     const stageEl = document.getElementById('stage');
     if (!stageEl) return;
-    const targets = () => stageEl.querySelectorAll('.verse-hi, .verse-en, .slide-text, .slide-title, .welcome-message');
-    if (!targets().length) return;
-    let guard = 0;
-    let shrank = false;
-    while (stageEl.scrollHeight > stageEl.clientHeight && guard < 16) {
-      let touched = false;
-      targets().forEach(el => {
-        const cur = parseFloat(getComputedStyle(el).fontSize);
-        const next = Math.max(14, Math.round(cur * 0.9));
-        if (next < cur) {
-          el.style.transition = 'none';
-          el.style.fontSize = next + 'px';
-          touched = true;
-        }
-      });
-      if (!touched) break;
-      shrank = true;
-      guard++;
-    }
-    if (shrank) {
-      requestAnimationFrame(() => targets().forEach(el => { el.style.transition = ''; }));
-    }
+    const sh = stageEl.scrollHeight;
+    const ch = stageEl.clientHeight;
+    if (sh <= ch + 2) return; // Fits without reflow
+
+    const targets = stageEl.querySelectorAll('.verse-hi, .verse-en, .slide-text, .slide-title, .welcome-message');
+    if (!targets.length) return;
+
+    // Single-pass proportional scaling: calculates direct factor without while loop
+    const factor = Math.max(0.5, (ch / sh) * 0.94);
+    targets.forEach(el => {
+      const cur = parseFloat(el.style.fontSize) || parseFloat(getComputedStyle(el).fontSize) || 40;
+      const next = Math.max(14, Math.floor(cur * factor));
+      el.style.fontSize = next + 'px';
+    });
   }
 
   // ── PDF rendering ──
@@ -1474,10 +1470,9 @@ const String tvHtmlContent = r'''
       }
     }
 
-    // Auto-fit pass now, and once more after webfonts settle (Hindi serif
-    // loads async and can re-wrap text taller than the first measure).
+    // Auto-fit pass now, and once more on next animation frame
     fitStageText();
-    setTimeout(fitStageText, 450);
+    requestAnimationFrame(() => fitStageText());
 
     prevStateType = state.type;
     updateMobileNav();

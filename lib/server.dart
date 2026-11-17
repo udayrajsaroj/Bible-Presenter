@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
@@ -318,16 +319,28 @@ Future<void> startServer(dynamic message) async {
 
   // ── Serve DLNA slide images (TV Direct channel) ──
   // SlideRenderer writes images into <uploadDir>/dlna/ from the main isolate;
-  // this route serves them to the TV. no-store: the TV must never cache a
-  // slide, or verse changes would show stale images.
+  // this route serves them to the TV with an in-memory cache to eliminate disk reads.
+  final Map<String, Uint8List> serverSlideCache = {};
+
   router.get('/dlna/<file>', (Request req, String file) async {
     try {
       final safeName = file.replaceAll('..', '').split('/').last;
-      final f = File('$_uploadDir/dlna/$safeName');
-      if (!await f.exists()) {
-        return Response.notFound('no such slide');
+      Uint8List? bytes = serverSlideCache[safeName];
+      if (bytes == null) {
+        final f = File('$_uploadDir/dlna/$safeName');
+        if (!await f.exists()) {
+          // Micro-retry in case async write is completing
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          if (!await f.exists()) {
+            return Response.notFound('no such slide');
+          }
+        }
+        bytes = await f.readAsBytes();
+        serverSlideCache[safeName] = bytes;
+        if (serverSlideCache.length > 10) {
+          serverSlideCache.remove(serverSlideCache.keys.first);
+        }
       }
-      final bytes = await f.readAsBytes();
       return Response.ok(bytes, headers: {
         'Content-Type': _contentType(safeName),
         'Content-Length': '${bytes.length}',

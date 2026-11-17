@@ -33,9 +33,18 @@ class OutputRouter {
   BuildContext? _pendingContext;
 
   // Pre-render cache: state key → PNG/JPG bytes (small LRU).
-  static const _cacheMax = 10;
+  static const _cacheMax = 20;
   final Map<String, Uint8List> _cache = <String, Uint8List>{};
   final List<String> _cacheOrder = <String>[];
+
+  /// Public check for testing and diagnostics: whether a state has been pre-rendered.
+  bool hasCached(Map<String, dynamic> state) => _cache.containsKey(stateKey(state));
+
+  /// Public retriever for cached slide bytes.
+  Uint8List? getCached(Map<String, dynamic> state) => _cache[stateKey(state)];
+
+  /// Number of pre-rendered slides currently cached.
+  int get cacheCount => _cache.length;
 
   /// Called from the controller's _emit() for every cast action. Media
   /// events that never travel over DLNA (YouTube) and TV→phone reports are
@@ -248,12 +257,15 @@ class OutputRouter {
 
   /// Pre-renders the likely next state (next verse, next slide, next stanza,
   /// next PDF page) so the DLNA switch is a publish-and-play instead of a
-  /// full capture (plan 4.3 latency lever).
+  /// full capture (plan 4.3 latency lever). Runs in the background without
+  /// blocking the active frame or UI interactions.
   Future<void> preRender(
-      Map<String, dynamic> nextState, BuildContext context) async {
-    final dlna = DlnaService.instance;
-    if (!dlna.isConnected) return;
+      Map<String, dynamic> nextState, [BuildContext? context]) async {
     final key = stateKey(nextState);
+    if (_cache.containsKey(key)) return;
+    // Microtask yield so optimistic UI and active gestures finish and render first
+    await Future.microtask(() {});
+    if (context != null && !context.mounted) return;
     if (_cache.containsKey(key)) return;
     try {
       final png = await SlideRenderer.capture(nextState, context: context);

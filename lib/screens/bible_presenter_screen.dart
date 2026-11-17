@@ -46,7 +46,8 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
           {})
       .keys
       .toList()
-    ..sort();
+    ..sort((a, b) => (int.tryParse(a.toString()) ?? 0)
+        .compareTo(int.tryParse(b.toString()) ?? 0));
 
   void _onSwipe(DragEndDetails d) {
     final v = d.velocity.pixelsPerSecond.dx;
@@ -86,7 +87,9 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
         final secondary = v['secondary'] ?? '';
         final ref = '${b.selectedBook} ${b.selectedChapter}:${b.selectedVerse}';
 
-        final chList = (b.selectedBookChapters ?? {}).keys.toList()..sort();
+        final chList = (b.selectedBookChapters ?? {}).keys.toList()
+          ..sort((a, b) => (int.tryParse(a.toString()) ?? 0)
+              .compareTo(int.tryParse(b.toString()) ?? 0));
         final chIdx = chList.indexOf(b.selectedChapter);
         final books = b.bible.keys.toList();
         final bIdx = books.indexOf(b.selectedBook);
@@ -377,9 +380,13 @@ class _ScriptureGridPickerState extends State<_ScriptureGridPicker> {
   Widget build(BuildContext context) {
     final b = widget.bibleState;
     final allBooks = b.bible.keys.toList(); // canonical order
-    final chList = (b.selectedBookChapters ?? {}).keys.toList()..sort();
+    final chList = (b.selectedBookChapters ?? {}).keys.toList()
+      ..sort((a, b) => (int.tryParse(a.toString()) ?? 0)
+          .compareTo(int.tryParse(b.toString()) ?? 0));
     final vList =
-        (b.selectedBookChapters?[b.selectedChapter] ?? {}).keys.toList()..sort();
+        (b.selectedBookChapters?[b.selectedChapter] ?? {}).keys.toList()
+          ..sort((a, b) => (int.tryParse(a.toString()) ?? 0)
+              .compareTo(int.tryParse(b.toString()) ?? 0));
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,

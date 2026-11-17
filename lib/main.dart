@@ -1172,25 +1172,34 @@ class _ControllerPageState extends State<ControllerPage>
   // ══════════════════ DLNA TV DIRECT (Feature 1) ══════════════════
   /// Pre-renders the likely next state (next verse / stanza / slide / PDF
   /// page) while the current one is on screen (plan 4.3 latency lever).
+  /// Runs asynchronously in a microtask with numerical sorting so lookahead
+  /// is instantaneous and always targets the true numerical sequence.
   void _preRenderNext() {
-    if (!_dlna.isConnected || _tvState['type'] == 'idle') return;
-    try {
-      final type = _tvState['type'] as String?;
-      final bg = _bgUrl != null ? {'url': _bgUrl} : null;
-      switch (type) {
-        case 'verse':
-          final bs = BibleState.of(context);
-          final vList = (bs.selectedBookChapters?[bs.selectedChapter] ?? {})
-              .keys
-              .toList()
-            ..sort();
-          final idx = vList.indexOf(bs.selectedVerse);
-          if (idx >= 0) {
-            // Pre-render N+1
-            if (idx < vList.length - 1) {
+    if (_tvState['type'] == 'idle') return;
+    scheduleMicrotask(() async {
+      try {
+        final type = _tvState['type'] as String?;
+        final bg = _bgUrl != null ? {'url': _bgUrl} : null;
+        switch (type) {
+          case 'verse':
+            if (!mounted) return;
+            final bs = BibleState.of(context);
+            final chList = (bs.selectedBookChapters ?? {}).keys.toList()
+              ..sort((a, b) => (int.tryParse(a.toString()) ?? 0)
+                  .compareTo(int.tryParse(b.toString()) ?? 0));
+            final vList = (bs.selectedBookChapters?[bs.selectedChapter] ?? {})
+                .keys
+                .toList()
+              ..sort((a, b) => (int.tryParse(a.toString()) ?? 0)
+                  .compareTo(int.tryParse(b.toString()) ?? 0));
+            final idx = vList.indexOf(bs.selectedVerse);
+            final chIdx = chList.indexOf(bs.selectedChapter);
+
+            // Pre-render N+1 (within chapter or first verse of next chapter)
+            if (idx >= 0 && idx < vList.length - 1) {
               final nextVNum = vList[idx + 1];
               final nv = bs.bible[bs.selectedBook]?[bs.selectedChapter]?[nextVNum];
-              OutputRouter.instance.preRender({
+              await OutputRouter.instance.preRender({
                 'type': 'verse',
                 'content': {
                   'book': bs.selectedBook,
@@ -1203,12 +1212,35 @@ class _ControllerPageState extends State<ControllerPage>
                 },
                 'background': bg,
               }, context);
+            } else if (idx == vList.length - 1 && chIdx >= 0 && chIdx < chList.length - 1) {
+              final nextCh = chList[chIdx + 1];
+              final nextChVs = (bs.selectedBookChapters?[nextCh] ?? {}).keys.toList()
+                ..sort((a, b) => (int.tryParse(a.toString()) ?? 0)
+                    .compareTo(int.tryParse(b.toString()) ?? 0));
+              if (nextChVs.isNotEmpty) {
+                final firstV = nextChVs.first;
+                final nv = bs.bible[bs.selectedBook]?[nextCh]?[firstV];
+                await OutputRouter.instance.preRender({
+                  'type': 'verse',
+                  'content': {
+                    'book': bs.selectedBook,
+                    'chapter': nextCh,
+                    'verse': firstV,
+                    'textEn': nv?['secondary'] ?? '',
+                    'textHi': nv?['primary'] ?? '',
+                    'text': nv?['primary'] ?? nv?['secondary'] ?? '',
+                    'fontSize': bs.fontSize,
+                  },
+                  'background': bg,
+                }, context);
+              }
             }
-            // Pre-render N-1
+
+            // Pre-render N-1 (within chapter or last verse of prev chapter)
             if (idx > 0) {
               final prevVNum = vList[idx - 1];
               final pv = bs.bible[bs.selectedBook]?[bs.selectedChapter]?[prevVNum];
-              OutputRouter.instance.preRender({
+              await OutputRouter.instance.preRender({
                 'type': 'verse',
                 'content': {
                   'book': bs.selectedBook,
@@ -1221,78 +1253,100 @@ class _ControllerPageState extends State<ControllerPage>
                 },
                 'background': bg,
               }, context);
+            } else if (idx == 0 && chIdx > 0) {
+              final prevCh = chList[chIdx - 1];
+              final prevChVs = (bs.selectedBookChapters?[prevCh] ?? {}).keys.toList()
+                ..sort((a, b) => (int.tryParse(a.toString()) ?? 0)
+                    .compareTo(int.tryParse(b.toString()) ?? 0));
+              if (prevChVs.isNotEmpty) {
+                final lastV = prevChVs.last;
+                final pv = bs.bible[bs.selectedBook]?[prevCh]?[lastV];
+                await OutputRouter.instance.preRender({
+                  'type': 'verse',
+                  'content': {
+                    'book': bs.selectedBook,
+                    'chapter': prevCh,
+                    'verse': lastV,
+                    'textEn': pv?['secondary'] ?? '',
+                    'textHi': pv?['primary'] ?? '',
+                    'text': pv?['primary'] ?? pv?['secondary'] ?? '',
+                    'fontSize': bs.fontSize,
+                  },
+                  'background': bg,
+                }, context);
+              }
             }
-          }
-          break;
-        case 'slide':
-          // Pre-render N+1
-          if (_activeSlide + 1 < _slides.length) {
-            final sl = _slides[_activeSlide + 1];
-            OutputRouter.instance.preRender({
-              'type': 'slide',
-              'content': {
-                'title': sl['title'] ?? '',
-                'subtitle': sl['subtitle'] ?? '',
-                'text': sl['text'] ?? '',
-                'fontSize': BibleState.of(context).fontSize,
-              },
-              'background': bg,
-            }, context);
-          }
-          // Pre-render N-1
-          if (_activeSlide > 0 && _slides.isNotEmpty) {
-            final sl = _slides[_activeSlide - 1];
-            OutputRouter.instance.preRender({
-              'type': 'slide',
-              'content': {
-                'title': sl['title'] ?? '',
-                'subtitle': sl['subtitle'] ?? '',
-                'text': sl['text'] ?? '',
-                'fontSize': BibleState.of(context).fontSize,
-              },
-              'background': bg,
-            }, context);
-          }
-          break;
-        case 'song':
-          final content = Map<String, dynamic>.from(_tvState['content'] as Map? ?? {});
-          final stanzas = List<String>.from(content['stanzas'] ?? []);
-          final cur = content['currentStanza'] as int? ?? 0;
-          // Pre-render N+1
-          if (cur + 1 < stanzas.length) {
-            final nextC = Map<String, dynamic>.from(content);
-            nextC['currentStanza'] = cur + 1;
-            OutputRouter.instance.preRender({
-              'type': 'song',
-              'content': nextC,
-              'background': bg,
-            }, context);
-          }
-          // Pre-render N-1
-          if (cur > 0 && cur < stanzas.length) {
-            final prevC = Map<String, dynamic>.from(content);
-            prevC['currentStanza'] = cur - 1;
-            OutputRouter.instance.preRender({
-              'type': 'song',
-              'content': prevC,
-              'background': bg,
-            }, context);
-          }
-          break;
-        case 'pdf':
-          if (_pdfTotalPages > 0) {
-            if (_pdfCurrentPage + 1 <= _pdfTotalPages) {
-              OutputRouter.instance.preRenderPdfPage(
-                  _currentPdfLocalPath, _pdfCurrentPage + 1, context);
+            break;
+          case 'slide':
+            // Pre-render N+1
+            if (_activeSlide + 1 < _slides.length) {
+              final sl = _slides[_activeSlide + 1];
+              await OutputRouter.instance.preRender({
+                'type': 'slide',
+                'content': {
+                  'title': sl['title'] ?? '',
+                  'subtitle': sl['subtitle'] ?? '',
+                  'text': sl['text'] ?? '',
+                  'fontSize': BibleState.of(context).fontSize,
+                },
+                'background': bg,
+              }, context);
             }
-            if (_pdfCurrentPage > 1) {
-              OutputRouter.instance.preRenderPdfPage(
-                  _currentPdfLocalPath, _pdfCurrentPage - 1, context);
+            // Pre-render N-1
+            if (_activeSlide > 0 && _slides.isNotEmpty) {
+              final sl = _slides[_activeSlide - 1];
+              await OutputRouter.instance.preRender({
+                'type': 'slide',
+                'content': {
+                  'title': sl['title'] ?? '',
+                  'subtitle': sl['subtitle'] ?? '',
+                  'text': sl['text'] ?? '',
+                  'fontSize': BibleState.of(context).fontSize,
+                },
+                'background': bg,
+              }, context);
             }
-          }
-          break;
-      }
-    } catch (_) {}
+            break;
+          case 'song':
+            final content = Map<String, dynamic>.from(_tvState['content'] as Map? ?? {});
+            final stanzas = List<String>.from(content['stanzas'] ?? []);
+            final cur = content['currentStanza'] as int? ?? 0;
+            // Pre-render N+1
+            if (cur + 1 < stanzas.length) {
+              final nextC = Map<String, dynamic>.from(content);
+              nextC['currentStanza'] = cur + 1;
+              await OutputRouter.instance.preRender({
+                'type': 'song',
+                'content': nextC,
+                'background': bg,
+              }, context);
+            }
+            // Pre-render N-1
+            if (cur > 0 && cur < stanzas.length) {
+              final prevC = Map<String, dynamic>.from(content);
+              prevC['currentStanza'] = cur - 1;
+              await OutputRouter.instance.preRender({
+                'type': 'song',
+                'content': prevC,
+                'background': bg,
+              }, context);
+            }
+            break;
+          case 'pdf':
+            if (_pdfTotalPages > 0) {
+              if (_pdfCurrentPage + 1 <= _pdfTotalPages) {
+                await OutputRouter.instance.preRenderPdfPage(
+                    _currentPdfLocalPath, _pdfCurrentPage + 1, context);
+              }
+              if (_pdfCurrentPage > 1) {
+                await OutputRouter.instance.preRenderPdfPage(
+                    _currentPdfLocalPath, _pdfCurrentPage - 1, context);
+              }
+            }
+            break;
+        }
+      } catch (_) {}
+    });
   }
   /// Renders whatever is currently on the presentation screen as a full-HD
   /// PNG and pushes it to the connected TV (SetAVTransportURI + Play).
@@ -1536,12 +1590,13 @@ class _ControllerPageState extends State<ControllerPage>
 
   void _prevVerse() {
     final bibleState = BibleState.of(context);
-    final chList = (bibleState.selectedBookChapters ?? {}).keys.toList()..sort();
+    final chList = (bibleState.selectedBookChapters ?? {}).keys.toList()
+      ..sort((a, b) => (int.tryParse(a.toString()) ?? 0).compareTo(int.tryParse(b.toString()) ?? 0));
     final vList =
         (bibleState.selectedBookChapters?[bibleState.selectedChapter] ?? {})
             .keys
             .toList()
-          ..sort();
+          ..sort((a, b) => (int.tryParse(a.toString()) ?? 0).compareTo(int.tryParse(b.toString()) ?? 0));
     final idx = vList.indexOf(bibleState.selectedVerse);
     if (idx > 0) {
       bibleState.selectedVerse = vList[idx - 1];
@@ -1554,7 +1609,7 @@ class _ControllerPageState extends State<ControllerPage>
         bibleState.selectedChapter = prevCh;
         final prevVList =
             (bibleState.selectedBookChapters?[prevCh] ?? {}).keys.toList()
-              ..sort();
+              ..sort((a, b) => (int.tryParse(a.toString()) ?? 0).compareTo(int.tryParse(b.toString()) ?? 0));
         if (prevVList.isNotEmpty) {
           bibleState.selectedVerse = prevVList.last;
           _castVerse();
@@ -1567,13 +1622,14 @@ class _ControllerPageState extends State<ControllerPage>
           final prevBook = books[bIdx - 1];
           bibleState.selectedBook = prevBook;
           final lastChs =
-              (bibleState.bible[prevBook] ?? {}).keys.toList()..sort();
+              (bibleState.bible[prevBook] ?? {}).keys.toList()
+                ..sort((a, b) => (int.tryParse(a.toString()) ?? 0).compareTo(int.tryParse(b.toString()) ?? 0));
           if (lastChs.isNotEmpty) {
             bibleState.selectedChapter = lastChs.last;
             final lastVs = (bibleState.bible[prevBook]?[lastChs.last] ?? {})
                 .keys
                 .toList()
-              ..sort();
+              ..sort((a, b) => (int.tryParse(a.toString()) ?? 0).compareTo(int.tryParse(b.toString()) ?? 0));
             if (lastVs.isNotEmpty) {
               bibleState.selectedVerse = lastVs.last;
             }
@@ -1586,12 +1642,13 @@ class _ControllerPageState extends State<ControllerPage>
 
   void _nextVerse() {
     final bibleState = BibleState.of(context);
-    final chList = (bibleState.selectedBookChapters ?? {}).keys.toList()..sort();
+    final chList = (bibleState.selectedBookChapters ?? {}).keys.toList()
+      ..sort((a, b) => (int.tryParse(a.toString()) ?? 0).compareTo(int.tryParse(b.toString()) ?? 0));
     final vList =
         (bibleState.selectedBookChapters?[bibleState.selectedChapter] ?? {})
             .keys
             .toList()
-          ..sort();
+          ..sort((a, b) => (int.tryParse(a.toString()) ?? 0).compareTo(int.tryParse(b.toString()) ?? 0));
     final idx = vList.indexOf(bibleState.selectedVerse);
     if (idx < vList.length - 1 && idx >= 0) {
       bibleState.selectedVerse = vList[idx + 1];
@@ -1604,7 +1661,7 @@ class _ControllerPageState extends State<ControllerPage>
         bibleState.selectedChapter = nextCh;
         final nextVList =
             (bibleState.selectedBookChapters?[nextCh] ?? {}).keys.toList()
-              ..sort();
+              ..sort((a, b) => (int.tryParse(a.toString()) ?? 0).compareTo(int.tryParse(b.toString()) ?? 0));
         if (nextVList.isNotEmpty) {
           bibleState.selectedVerse = nextVList.first;
           _castVerse();

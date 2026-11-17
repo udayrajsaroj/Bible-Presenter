@@ -205,37 +205,53 @@ class DlnaService extends ChangeNotifier {
 
   // ── Casting ──
 
+  int _castImageGeneration = 0;
+
   /// Sends a slide image to the TV: SetAVTransportURI with photo item
   /// metadata (object.item.imageItem.photo — best-supported media class
-  /// across TV brands) followed by Play.
+  /// across TV brands) followed by Play. Supersedes stale commands if
+  /// verses switch quickly, avoiding queued backlogs.
   Future<bool> castImage(String url, {String title = 'BiblePresenter'}) async {
     var device = connectedDevice;
     if (device == null) return false;
+    final int generation = ++_castImageGeneration;
     try {
       await _api.setMediaUri(
         device.udn,
         Url(value: url),
         ImageMetadata(title: title, upnpClass: 'object.item.imageItem.photo'),
       );
+      if (generation != _castImageGeneration) {
+        return false;
+      }
       await _api.play(device.udn);
+      if (generation != _castImageGeneration) {
+        return false;
+      }
       if (rendererOffline) {
         rendererOffline = false;
         notifyListeners();
       }
       return true;
     } catch (e) {
+      if (generation != _castImageGeneration) {
+        return false;
+      }
       debugPrint('[Dlna] castImage attempt 1 failed: $e');
       final revived = await pingStored(device.udn.value);
       if (revived != null) {
         connectedDevice = revived;
         device = revived;
         try {
+          if (generation != _castImageGeneration) return false;
           await _api.setMediaUri(
             device.udn,
             Url(value: url),
             ImageMetadata(title: title, upnpClass: 'object.item.imageItem.photo'),
           );
+          if (generation != _castImageGeneration) return false;
           await _api.play(device.udn);
+          if (generation != _castImageGeneration) return false;
           rendererOffline = false;
           notifyListeners();
           return true;

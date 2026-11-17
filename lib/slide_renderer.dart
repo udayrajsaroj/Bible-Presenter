@@ -41,6 +41,15 @@ class SlideRenderer {
 
   static int _slideCounter = 0;
 
+  @visibleForTesting
+  static void resetSlideCounter() => _slideCounter = 0;
+
+  /// In-memory cache of recent slide bytes: name -> bytes.
+  /// Allows instant serving and verification without disk latency.
+  static final Map<String, Uint8List> memorySlides = {};
+  static const int _maxMemorySlides = 10;
+  static String _lastEnsuredDir = '';
+
   // ── tv.html palette ──
   static const Color _ink = Color(0xFF0a0a0f);
   static const Color _gold = Color(0xFFc9a96e);
@@ -98,28 +107,44 @@ class SlideRenderer {
 
 
   /// Writes a captured slide to `<uploadDir>/dlna/slide_<n>.(jpg|png)` and returns the
-  /// URL the TV should download. Automatically cleans up older slide files to prevent disk bloat.
+  /// URL the TV should download. Saves in RAM and writes to disk asynchronously (flush: false)
+  /// with zero main-thread stall and no synchronous directory scans.
   static Future<String?> publish(Uint8List bytes) async {
     if (uploadDirPath.isEmpty) return null;
     _slideCounter++;
-    final dir = Directory('$uploadDirPath/dlna');
-    if (!await dir.exists()) await dir.create(recursive: true);
-    
+
     final isJpg = bytes.length > 2 && bytes[0] == 0xFF && bytes[1] == 0xD8;
     final ext = isJpg ? 'jpg' : 'png';
     final name = 'slide_$_slideCounter.$ext';
-    await File('${dir.path}/$name').writeAsBytes(bytes, flush: true);
 
-    // Keep only the last 5 slide files to prevent disk bloat
-    try {
-      final oldFiles = dir.listSync().whereType<File>().toList();
-      if (oldFiles.length > 5) {
-        oldFiles.sort((a, b) => a.statSync().modified.compareTo(b.statSync().modified));
-        for (var i = 0; i < oldFiles.length - 5; i++) {
-          try { oldFiles[i].deleteSync(); } catch (_) {}
+    // Store in RAM for instantaneous delivery
+    memorySlides[name] = bytes;
+    if (memorySlides.length > _maxMemorySlides) {
+      memorySlides.remove(memorySlides.keys.first);
+    }
+
+    final dir = Directory('$uploadDirPath/dlna');
+    if (_lastEnsuredDir != dir.path) {
+      if (!await dir.exists()) await dir.create(recursive: true);
+      _lastEnsuredDir = dir.path;
+    }
+    await File('${dir.path}/$name').writeAsBytes(bytes, flush: false);
+
+    // Background pruning: keep only latest 5 slide files without blocking the caller
+    scheduleMicrotask(() async {
+      try {
+        final entities = await dir.list().where((e) => e is File).toList();
+        if (entities.length > 5) {
+          final files = entities.cast<File>();
+          final stats = await Future.wait(
+              files.map((f) async => (file: f, stat: await f.stat())));
+          stats.sort((a, b) => a.stat.modified.compareTo(b.stat.modified));
+          for (var i = 0; i < stats.length - 5; i++) {
+            try { await stats[i].file.delete(); } catch (_) {}
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    });
 
     final ip = (deviceIp.isEmpty || deviceIp == '...') ? '127.0.0.1' : deviceIp;
     return 'http://$ip:$serverPort/dlna/$name';
