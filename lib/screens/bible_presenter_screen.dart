@@ -16,6 +16,7 @@ class BiblePresenterScreen extends StatefulWidget {
   final VoidCallback onNextVerse;
   final VoidCallback onLogo;
   final VoidCallback onBlackout;
+  final bool autoCastOnMount;
 
   const BiblePresenterScreen({
     super.key,
@@ -26,6 +27,7 @@ class BiblePresenterScreen extends StatefulWidget {
     required this.onNextVerse,
     required this.onLogo,
     required this.onBlackout,
+    this.autoCastOnMount = false,
   });
 
   @override
@@ -34,6 +36,27 @@ class BiblePresenterScreen extends StatefulWidget {
 
 class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
   final _stageScroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.autoCastOnMount) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final currentType = widget.tvState.value['type'] as String?;
+          final currentContent =
+              widget.tvState.value['content'] as Map<String, dynamic>?;
+          final isCurrentVerseOnTv = currentType == 'verse' &&
+              currentContent?['book'] == widget.bibleState.selectedBook &&
+              currentContent?['chapter'] == widget.bibleState.selectedChapter &&
+              currentContent?['verse'] == widget.bibleState.selectedVerse;
+          if (!isCurrentVerseOnTv) {
+            widget.onCastVerse();
+          }
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {

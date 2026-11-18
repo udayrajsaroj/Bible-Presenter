@@ -79,4 +79,26 @@ void main() {
     expect(bibleState.selectedChapter, 119);
     expect(casts, 1);
   });
+
+  testWidgets('BiblePresenterScreen with autoCastOnMount: true casts initial verse immediately on mount',
+      (tester) async {
+    final bibleState = await loadedState(tester);
+    var casts = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: BiblePresenterScreen(
+        bibleState: bibleState,
+        tvState: ValueNotifier<Map<String, dynamic>>({'type': 'idle'}),
+        onCastVerse: () => casts++,
+        onPrevVerse: () {},
+        onNextVerse: () {},
+        onLogo: () {},
+        onBlackout: () {},
+        autoCastOnMount: true,
+      ),
+    ));
+    await tester.pumpAndSettle(const Duration(milliseconds: 50));
+
+    expect(casts, equals(1),
+        reason: 'First verse must be cast immediately at once upon mounting');
+  });
 }

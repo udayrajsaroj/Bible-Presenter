@@ -2356,15 +2356,22 @@ class _ControllerPageState extends State<ControllerPage>
   // height so Prev/Next never shift (see widgets/presenter_shell.dart).
 
   void _openBiblePresenter() {
+    final bibleState = BibleState.of(context);
+    if (!bibleState.bibleLoaded || bibleState.bible.isEmpty) {
+      _showSnack('Bible data is still loading...', error: true);
+      return;
+    }
+    _castVerse();
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => BiblePresenterScreen(
-        bibleState: BibleState.of(context),
+        bibleState: bibleState,
         tvState: tvStateN,
         onCastVerse: _castVerse,
         onPrevVerse: _prevVerse,
         onNextVerse: _nextVerse,
         onLogo: _castLogo,
         onBlackout: _castBlackout,
+        autoCastOnMount: true,
       ),
     ));
   }
