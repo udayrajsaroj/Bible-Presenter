@@ -1653,7 +1653,15 @@ class _ControllerPageState extends State<ControllerPage>
         }
       } else {
         // Book boundary: previous book's last chapter, last verse
-        final books = bibleState.bible.keys.toList();
+        final books = bibleState.bible.keys.toList()
+          ..sort((a, b) {
+            final aIdx = BibleState.canonicalBooks.indexOf(a);
+            final bIdx = BibleState.canonicalBooks.indexOf(b);
+            if (aIdx != -1 && bIdx != -1) return aIdx.compareTo(bIdx);
+            if (aIdx != -1) return -1;
+            if (bIdx != -1) return 1;
+            return a.compareTo(b);
+          });
         final bIdx = books.indexOf(bibleState.selectedBook);
         if (bIdx > 0) {
           final prevBook = books[bIdx - 1];
@@ -1705,7 +1713,15 @@ class _ControllerPageState extends State<ControllerPage>
         }
       } else {
         // Book boundary: advance to next book's first chapter, first verse
-        final books = bibleState.bible.keys.toList();
+        final books = bibleState.bible.keys.toList()
+          ..sort((a, b) {
+            final aIdx = BibleState.canonicalBooks.indexOf(a);
+            final bIdx = BibleState.canonicalBooks.indexOf(b);
+            if (aIdx != -1 && bIdx != -1) return aIdx.compareTo(bIdx);
+            if (aIdx != -1) return -1;
+            if (bIdx != -1) return 1;
+            return a.compareTo(b);
+          });
         final bIdx = books.indexOf(bibleState.selectedBook);
         if (bIdx < books.length - 1 && bIdx >= 0) {
           final nextBook = books[bIdx + 1];

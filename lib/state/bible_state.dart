@@ -18,6 +18,40 @@ typedef VerseRecord = Map<String, String>;
 /// ship as assets; more languages are imported from VerseVIEW
 /// bible-database files (Zefania XML / app JSON) via BibleImport.
 class BibleState extends ChangeNotifier {
+  /// Canonical Protestant 66-book order (39 OT, 27 NT).
+  static const List<String> canonicalBooks = [
+    'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua',
+    'Judges', 'Ruth', '1 Samuel', '2 Samuel', '1 Kings', '2 Kings',
+    '1 Chronicles', '2 Chronicles', 'Ezra', 'Nehemiah', 'Esther', 'Job',
+    'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon', 'Isaiah',
+    'Jeremiah', 'Lamentations', 'Ezekiel', 'Daniel', 'Hosea', 'Joel',
+    'Amos', 'Obadiah', 'Jonah', 'Micah', 'Nahum', 'Habakkuk', 'Zephaniah',
+    'Haggai', 'Zechariah', 'Malachi', 'Matthew', 'Mark', 'Luke', 'John',
+    'Acts', 'Romans', '1 Corinthians', '2 Corinthians', 'Galatians',
+    'Ephesians', 'Philippians', 'Colossians', '1 Thessalonians',
+    '2 Thessalonians', '1 Timothy', '2 Timothy', 'Titus', 'Philemon',
+    'Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John',
+    '3 John', 'Jude', 'Revelation',
+  ];
+
+  static String normalizeBookName(String name) {
+    final lower = name.trim().toLowerCase();
+    switch (lower) {
+      case 'psalm':
+      case 'psalms of david':
+        return 'Psalms';
+      case 'song of songs':
+      case 'canticles':
+      case 'canticle of canticles':
+        return 'Song of Solomon';
+      default:
+        for (final cb in canonicalBooks) {
+          if (cb.toLowerCase() == lower) return cb;
+        }
+        return name.trim();
+    }
+  }
+
   /// Per-language data: code → {book: {chapter: {verse: text}}}.
   final Map<String, Map<String, dynamic>> _langData = {};
 
@@ -231,7 +265,7 @@ class BibleState extends ChangeNotifier {
     void merge(Map<String, dynamic>? data, String slot) {
       if (data == null) return;
       for (final bookEntry in data.entries) {
-        final bookName = bookEntry.key;
+        final bookName = normalizeBookName(bookEntry.key);
         final chapters = bookEntry.value as Map<String, dynamic>;
         final bookMap =
             (bible[bookName] ??= <int, Map<int, Map<String, String>>>{});
@@ -253,23 +287,8 @@ class BibleState extends ChangeNotifier {
     merge(primary, 'primary');
     merge(secondary, 'secondary');
 
-    const canonicalOrder = [
-      'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua',
-      'Judges', 'Ruth', '1 Samuel', '2 Samuel', '1 Kings', '2 Kings',
-      '1 Chronicles', '2 Chronicles', 'Ezra', 'Nehemiah', 'Esther', 'Job',
-      'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon', 'Isaiah',
-      'Jeremiah', 'Lamentations', 'Ezekiel', 'Daniel', 'Hosea', 'Joel',
-      'Amos', 'Obadiah', 'Jonah', 'Micah', 'Nahum', 'Habakkuk', 'Zephaniah',
-      'Haggai', 'Zechariah', 'Malachi', 'Matthew', 'Mark', 'Luke', 'John',
-      'Acts', 'Romans', '1 Corinthians', '2 Corinthians', 'Galatians',
-      'Ephesians', 'Philippians', 'Colossians', '1 Thessalonians',
-      '2 Thessalonians', '1 Timothy', '2 Timothy', 'Titus', 'Philemon',
-      'Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John',
-      '3 John', 'Jude', 'Revelation',
-    ];
-
     final orderedBible = <String, Map<int, Map<int, Map<String, String>>>>{};
-    for (final book in canonicalOrder) {
+    for (final book in canonicalBooks) {
       if (bible.containsKey(book)) {
         orderedBible[book] = bible[book]!;
       }

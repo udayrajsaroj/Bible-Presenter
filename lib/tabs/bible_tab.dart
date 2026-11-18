@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../state/bible_state.dart';
 import '../theme.dart';
 import '../widgets/shared_widgets.dart';
 
@@ -117,7 +118,15 @@ class BibleTab extends StatelessWidget {
         Row(children: [
           Expanded(child: dropdownField<String>(
             label: 'Book', value: selBook,
-            items: bible.keys.toList(),
+            items: bible.keys.toList()
+              ..sort((a, b) {
+                final aIdx = BibleState.canonicalBooks.indexOf(a);
+                final bIdx = BibleState.canonicalBooks.indexOf(b);
+                if (aIdx != -1 && bIdx != -1) return aIdx.compareTo(bIdx);
+                if (aIdx != -1) return -1;
+                if (bIdx != -1) return 1;
+                return a.compareTo(b);
+              }),
             display: (v) => v,
             onChanged: onBookChanged,
           )),

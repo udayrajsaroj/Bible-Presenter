@@ -91,7 +91,15 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
           ..sort((a, b) => (int.tryParse(a.toString()) ?? 0)
               .compareTo(int.tryParse(b.toString()) ?? 0));
         final chIdx = chList.indexOf(b.selectedChapter);
-        final books = b.bible.keys.toList();
+        final books = b.bible.keys.toList()
+          ..sort((a, b) {
+            final aIdx = BibleState.canonicalBooks.indexOf(a);
+            final bIdx = BibleState.canonicalBooks.indexOf(b);
+            if (aIdx != -1 && bIdx != -1) return aIdx.compareTo(bIdx);
+            if (aIdx != -1) return -1;
+            if (bIdx != -1) return 1;
+            return a.compareTo(b);
+          });
         final bIdx = books.indexOf(b.selectedBook);
         final hasNext = (vIdx < verses.length - 1) ||
             (chIdx < chList.length - 1) ||
@@ -379,7 +387,15 @@ class _ScriptureGridPickerState extends State<_ScriptureGridPicker> {
   @override
   Widget build(BuildContext context) {
     final b = widget.bibleState;
-    final allBooks = b.bible.keys.toList(); // canonical order
+    final allBooks = b.bible.keys.toList()
+      ..sort((a, b) {
+        final aIdx = BibleState.canonicalBooks.indexOf(a);
+        final bIdx = BibleState.canonicalBooks.indexOf(b);
+        if (aIdx != -1 && bIdx != -1) return aIdx.compareTo(bIdx);
+        if (aIdx != -1) return -1;
+        if (bIdx != -1) return 1;
+        return a.compareTo(b);
+      });
     final chList = (b.selectedBookChapters ?? {}).keys.toList()
       ..sort((a, b) => (int.tryParse(a.toString()) ?? 0)
           .compareTo(int.tryParse(b.toString()) ?? 0));
