@@ -153,22 +153,23 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
             child: Row(children: [
               // Three inline scripture selectors opening the full-screen curved grid picker
               Expanded(
+                flex: 4,
                 child: _RefPillButton(
                   text: 'Book: ${b.selectedBook}',
                   onTap: () => _openScripturePicker(0),
                 ),
               ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 78,
+              const SizedBox(width: 5),
+              Expanded(
+                flex: 2,
                 child: _RefPillButton(
                   text: 'Ch: ${b.selectedChapter}',
                   onTap: () => _openScripturePicker(1),
                 ),
               ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 68,
+              const SizedBox(width: 5),
+              Expanded(
+                flex: 2,
                 child: _RefPillButton(
                   text: 'Vs: ${b.selectedVerse}',
                   onTap: () => _openScripturePicker(2),
@@ -214,8 +215,8 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: kGold,
-                        fontSize: (b.fontSize * 0.85).clamp(20, 52).toDouble(),
-                        height: 1.75,
+                        fontSize: 18,
+                        height: 1.6,
                         fontWeight: FontWeight.w600,
                         shadows: [
                           Shadow(
@@ -225,19 +226,19 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
                       ),
                     ),
                   if (primary.isNotEmpty && secondary.isNotEmpty) ...[
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 14),
                     const Text('❖',
-                        style: TextStyle(color: kGold, fontSize: 15)),
-                    const SizedBox(height: 18),
+                        style: TextStyle(color: kGold, fontSize: 13)),
+                    const SizedBox(height: 14),
                   ],
                   if (secondary.isNotEmpty)
                     Text(
                       '"$secondary"',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.white70,
-                        fontSize: (b.fontSize * 0.6).clamp(14, 34).toDouble(),
-                        height: 1.75,
+                        fontSize: 15,
+                        height: 1.55,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -309,7 +310,7 @@ class _RefPillButton extends StatelessWidget {
         splashColor: accent.withOpacity(0.2),
         child: Container(
           height: 32,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: accent.withOpacity(0.55), width: 1),
