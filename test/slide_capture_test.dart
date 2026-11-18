@@ -84,4 +84,35 @@ void main() {
       expect(isaiah, equals(song + 1));
     }
   });
+
+  test('TEST: BibleState fontSize clamps up to 120 and allows large TV text sizes', () {
+    final state = BibleState();
+    state.fontSize = 80;
+    expect(state.fontSize, equals(80));
+    state.fontSize = 112;
+    expect(state.fontSize, equals(112));
+    state.fontSize = 150;
+    expect(state.fontSize, equals(120), reason: 'Clamped to max 120');
+    state.fontSize = 10;
+    expect(state.fontSize, equals(24), reason: 'Clamped to min 24');
+  });
+
+  test('TEST: SlideRenderer renders large font size (Joshua 3:16) cleanly on 1080p slide', () async {
+    final joshuaVerseState = {
+      'type': 'verse',
+      'content': {
+        'book': 'Joshua',
+        'chapter': '3',
+        'verse': '16',
+        'textEn': 'That the waters which came down from above stood and rose up upon an heap very far from the city Adam, that is beside Zaretan: and those that came down toward the sea of the plain, even the salt sea, failed, and were cut off: and the people passed over right against Jericho.',
+        'textHi': 'तब जो जल ऊपर की ओर से बहा आता था वह बहुत दूर, अर्थात् आदाम नगर के पास जो सारतान के निकट है रुककर एक ढेर हो गया, और दीवार सा उठा रहा, और जो जल अराबा का ताल, जो खारा ताल भी कहलाता है उसकी ओर बहा जाता था, वह पूरी रीति से सूख गया; और प्रजा के लोग यरीहो के सामने पार उतर गए।',
+        'fontSize': 96,
+      },
+      'background': null,
+    };
+
+    final bytes = await SlideRenderer.capture(joshuaVerseState);
+    expect(bytes, isNotNull);
+    expect(bytes!.length, greaterThan(1000));
+  });
 }

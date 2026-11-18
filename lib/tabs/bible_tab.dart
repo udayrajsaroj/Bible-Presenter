@@ -180,7 +180,7 @@ class BibleTab extends StatelessWidget {
             activeTrackColor: kGold, thumbColor: kGold,
             inactiveTrackColor: kBorder, overlayColor: kGold.withOpacity(0.1),
           ),
-          child: Slider(min: 24, max: 80, divisions: 56, value: fontSize.toDouble(), onChanged: (v) => onFontSizeChanged(v.round())),
+          child: Slider(min: 24, max: 120, divisions: 96, value: fontSize.toDouble().clamp(24.0, 120.0), onChanged: (v) => onFontSizeChanged(v.round())),
         ),
         const SizedBox(height: 6),
         Row(children: [

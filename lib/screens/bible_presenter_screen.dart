@@ -133,7 +133,7 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
                 b.fontSize = size;
                 widget.onCastVerse();
               },
-              itemBuilder: (_) => [36, 44, 52, 60, 68, 80]
+              itemBuilder: (_) => [36, 44, 52, 60, 68, 80, 96, 112]
                   .map((s) => PopupMenuItem<int>(
                       value: s,
                       child: Text('$s sp',

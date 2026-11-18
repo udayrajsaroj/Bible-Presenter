@@ -201,7 +201,7 @@ const String tvHtmlContent = r'''
     .ornament {
       display: flex; align-items: center; justify-content: center; gap: 16px;
       width: 100%;
-      margin: 20px 0;
+      margin: 14px 0;
       color: var(--gold);
       opacity: 0.6;
       font-size: 18px;
@@ -226,9 +226,9 @@ const String tvHtmlContent = r'''
       font-family: 'Crimson Pro', 'Tiro Devanagari Hindi', 'Nirmala UI', 'Mangal', Georgia, 'Times New Roman', serif;
       font-weight: 400;
       color: #ffffff;
-      line-height: 1.5;
+      line-height: 1.42;
       text-shadow: 0 2px 40px rgba(0,0,0,0.9), 0 0 60px rgba(255,255,255,0.08);
-      transition: font-size 0.4s ease;
+      transition: font-size 0.25s ease;
       text-align: center;
     }
     .verse-en {
@@ -236,9 +236,9 @@ const String tvHtmlContent = r'''
       font-weight: 300;
       font-style: italic;
       color: #ffffff;
-      line-height: 1.6;
+      line-height: 1.45;
       text-shadow: 0 2px 30px rgba(0,0,0,0.95);
-      transition: font-size 0.4s ease;
+      transition: font-size 0.25s ease;
       text-align: center;
     }
     .verse-ref {
@@ -250,7 +250,7 @@ const String tvHtmlContent = r'''
       font-size: clamp(20px, 2.2vw, 36px);
       text-shadow: 0 0 30px rgba(201,169,110,0.5);
       text-align: center;
-      margin-bottom: 24px;
+      margin-bottom: 20px;
     }
 
     /* ── Song specific styles ── */
@@ -1105,12 +1105,12 @@ const String tvHtmlContent = r'''
     const enLen = content?.textEn?.length || 0;
     const total = (hiLen + enLen) || (content?.text?.length || 0);
     const both = hiLen > 0 && enLen > 0;
-    const baseFs = Math.max(40, (base || 48));
+    const baseFs = Math.max(38, (base || 48));
     let scale = 1.0;
     if (both) {
-      scale = total > 500 ? 0.60 : total > 350 ? 0.70 : total > 220 ? 0.80 : total > 120 ? 0.92 : 1.05;
+      scale = total > 550 ? 0.76 : total > 380 ? 0.86 : total > 240 ? 0.98 : total > 120 ? 1.10 : 1.25;
     } else {
-      scale = total > 400 ? 0.68 : total > 250 ? 0.80 : total > 140 ? 0.92 : 1.12;
+      scale = total > 450 ? 0.84 : total > 300 ? 0.96 : total > 150 ? 1.10 : 1.28;
     }
     const mobileFactor = isMobile() ? 0.7 : 1;
     return Math.max(20, Math.round(baseFs * scale * mobileFactor));
@@ -1118,9 +1118,9 @@ const String tvHtmlContent = r'''
 
   // ── Mobile font sizing for songs ──
   function songFontSize(textLen, base) {
-    const scale = textLen > 300 ? 0.55 : textLen > 200 ? 0.68 : textLen > 120 ? 0.82 : textLen > 60 ? 0.95 : 1.1;
+    const scale = textLen > 300 ? 0.64 : textLen > 200 ? 0.78 : textLen > 120 ? 0.92 : textLen > 60 ? 1.05 : 1.20;
     const mobileFactor = isMobile() ? 0.65 : 1;
-    return Math.max(14, Math.round((base || 44) * scale * mobileFactor));
+    return Math.max(16, Math.round((base || 44) * scale * mobileFactor));
   }
 
   // ── Auto-fit: single-pass proportional scaling to eliminate DOM reflow loops ──
@@ -1351,9 +1351,9 @@ const String tvHtmlContent = r'''
       stage.innerHTML = `
         <div class="verse-container fade-in" style="max-width:${maxW};width:100%">
           <p class="verse-ref">${c.book || ''} ${c.chapter || ''}:${c.verse || ''}</p>
-          ${hasHi ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:${hasEn?'12px':'20px'}">${c.textHi}</p>` : ''}
+          ${hasHi ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:${hasEn?'8px':'16px'}">${c.textHi}</p>` : ''}
           ${hasHi && hasEn ? `<div class="ornament">&#10022;</div>` : ''}
-          ${hasEn ? `<p class="verse-en" style="font-size:${enPx};${enStyle}margin-bottom:16px">${c.textEn}</p>` : ''}
+          ${hasEn ? `<p class="verse-en" style="font-size:${enPx};${enStyle}margin-bottom:12px">${c.textEn}</p>` : ''}
           ${!hasHi && c.text ? `<p class="verse-hi" style="font-size:${hiPx};margin-bottom:16px">"${c.text}"</p>` : ''}
         </div>`;
 

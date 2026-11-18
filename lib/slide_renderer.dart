@@ -410,15 +410,15 @@ class SlideRenderer {
   /// Port of tv.html songFontSize().
   static double _songAutoFontSize(String text, num base) {
     final scale = text.length > 300
-        ? 0.55
+        ? 0.64
         : text.length > 200
-            ? 0.68
+            ? 0.78
             : text.length > 120
-                ? 0.82
+                ? 0.92
                 : text.length > 60
-                    ? 0.95
-                    : 1.1;
-    return (base * scale).clamp(14.0, 220.0).toDouble();
+                    ? 1.05
+                    : 1.20;
+    return (base * scale).clamp(16.0, 220.0).toDouble();
   }
 
   static const Shadow _tvShadow =
@@ -433,7 +433,7 @@ class SlideRenderer {
     // Accurately combine text without duplicating fallback
     final String combinedText;
     if (hi.isNotEmpty && en.isNotEmpty) {
-      combinedText = '$hi\n\n$en';
+      combinedText = '$hi\n$en';
     } else if (hi.isNotEmpty) {
       combinedText = hi;
     } else if (en.isNotEmpty) {
@@ -443,7 +443,15 @@ class SlideRenderer {
     }
 
     final double maxWidth = slideSize.width - 240; // 1680px — leaves 120px safe padding from borders
-    const double maxHeight = 730; // leaves space for top reference + safe margins
+    final ref = '${c['book'] ?? ''} ${c['chapter'] ?? ''}:${c['verse'] ?? ''}'
+        .trim()
+        .toUpperCase();
+    final nonTextHeight = (ref.isNotEmpty ? 66.0 : 0.0) +
+        (hi.isNotEmpty && en.isNotEmpty ? 46.0 : 0.0);
+    // Total slide height is 1080. Padding is vertical 32 (64px).
+    // Reserve balanced safe margins of ~55px top and bottom (~970px total content).
+    // Subtract non-text elements to get the maximum allowable text height.
+    final double maxTextHeight = (960.0 - nonTextHeight).clamp(680.0, 900.0);
 
     double probe(double size) {
       final tp = TextPainter(
@@ -451,7 +459,7 @@ class SlideRenderer {
           text: combinedText,
           style: TextStyle(
             fontSize: size,
-            height: 1.38,
+            height: 1.34,
             fontFamilyFallback: const ['serif'],
           ),
         ),
@@ -462,18 +470,19 @@ class SlideRenderer {
       return h;
     }
 
-    // Binary search for largest font size that fills available space (6 iterations is accurate to <1px)
+    // Binary search for largest font size that fills available space
     double lo = 28.0;
-    double hiSize = (base * 1.5).clamp(58.0, 72.0);
-    for (int i = 0; i < 6; i++) {
+    final double targetMax = (base * 1.45).clamp(68.0, 135.0);
+    double hiSize = targetMax;
+    for (int i = 0; i < 7; i++) {
       final mid = (lo + hiSize) / 2;
-      if (probe(mid) <= maxHeight) {
+      if (probe(mid) <= maxTextHeight) {
         lo = mid;
       } else {
         hiSize = mid;
       }
     }
-    final fs = lo.clamp(28.0, 72.0);
+    final fs = lo.clamp(28.0, targetMax);
     final isDevanagari = RegExp(r'[\u0900-\u097F]').hasMatch(en);
 
     Widget text(String s, {bool italic = false}) => Text(
@@ -482,17 +491,13 @@ class SlideRenderer {
           style: TextStyle(
             color: italic ? Colors.white70 : Colors.white,
             fontSize: fs,
-            height: 1.38,
+            height: 1.34,
             fontStyle: (italic && !isDevanagari) ? FontStyle.italic : FontStyle.normal,
             fontWeight: italic ? FontWeight.w300 : FontWeight.w400,
             fontFamilyFallback: const ['serif'],
             shadows: const [_tvShadow],
           ),
         );
-
-    final ref = '${c['book'] ?? ''} ${c['chapter'] ?? ''}:${c['verse'] ?? ''}'
-        .trim()
-        .toUpperCase();
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -503,14 +508,14 @@ class SlideRenderer {
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: _gold,
-              fontSize: 36,
-              letterSpacing: 6,
+              fontSize: 34,
+              letterSpacing: 5,
               fontWeight: FontWeight.w700,
               fontFamilyFallback: ['serif'],
               shadows: [Shadow(color: Color(0x66c9a96e), blurRadius: 30)],
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 20),
         ],
         if (hi.isNotEmpty) text(hi),
         if (hi.isNotEmpty && en.isNotEmpty)
@@ -710,7 +715,7 @@ class _Ornament extends StatelessWidget {
       ),
     );
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 90),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 90),
       child: Row(
         children: [
           line,

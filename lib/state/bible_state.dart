@@ -124,7 +124,7 @@ class BibleState extends ChangeNotifier {
 
   set fontSize(int size) {
     if (_fontSize != size) {
-      _fontSize = size.clamp(24, 80);
+      _fontSize = size.clamp(24, 120);
       notifyListeners();
     }
   }
