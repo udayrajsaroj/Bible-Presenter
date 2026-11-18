@@ -14,6 +14,7 @@ import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'server.dart';
 import 'theme.dart';
+import 'theme/app_theme.dart';
 import 'dlna_service.dart';
 import 'output_router.dart';
 import 'slide_renderer.dart';
@@ -23,6 +24,13 @@ import 'tabs/bible_tab.dart';
 import 'tabs/songs_tab.dart';
 import 'tabs/files_tab.dart';
 import 'tabs/settings_tab.dart';
+import 'widgets/app_bottom_nav.dart';
+import 'screens/v2/home_screen.dart';
+import 'screens/v2/bible_hub_screen.dart';
+import 'screens/v2/files_hub_screen.dart';
+import 'screens/v2/settings_hub_screen.dart';
+import 'screens/v2/slides_hub_screen.dart';
+import 'screens/v2/songs_hub_screen.dart';
 import 'widgets/shared_widgets.dart';
 import 'widgets/section_fullscreen.dart';
 import 'widgets/schedule_detail_page.dart';
@@ -114,8 +122,14 @@ class _ControllerPageState extends State<ControllerPage>
   int _reconnectDelay = 2;
   static const int _maxReconnectDelay = 15;
 
-  // ── Tab ──
+  // ── Tab controller (classic interface route) ──
   late TabController _tabController;
+
+  // ── Bottom navigation shell (redesigned dark-neon UI) ──
+  int _navIndex = 0;
+
+  /// Asset background currently applied from the Slides hub grid.
+  String _appliedBgAsset = '';
 
   // ── Slides state ──
   List<Map<String, String>> _slides = List.from(defaultSlides);
@@ -907,6 +921,191 @@ class _ControllerPageState extends State<ControllerPage>
       return content['message'] as String? ?? '';
     }
     return '';
+  }
+
+  // ══════════════ V2 HUB OPENERS (redesigned navigation) ══════════════
+
+  /// Slides hub: background media grid + custom slide entry points.
+  void _openSlidesHub() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => SlidesHubScreen(
+        activeBackgroundAsset: _appliedBgAsset,
+        onPickBackground: _applyAssetBackground,
+        onAddCustomSlide: _showAddSlideModal,
+        onOpenCustomSlides: _openCustomSlidesSheet,
+      ),
+    ));
+  }
+
+  /// Songs hub: language-filtered song list + floating mini player.
+  void _openSongsHub() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => Consumer2<SongState, ScheduleState>(
+        builder: (context, songs, schedules, _) => SongsHubScreen(
+          allSongs: songs.allSongs,
+          songsLoaded: songs.songsLoaded,
+          searchCtrl: songs.songSearchController,
+          selectedSongIndex: songs.selectedSongIndex,
+          onAddSong: _showAddSongModal,
+          onImportWord: _importSongWord,
+          onFilterSongs: (query) => songs.songSearchQuery = query,
+          onSelectSong: (i) => songs.selectedSongIndex = i,
+          onPlaySong: (i) => _openSongPresenter(index: i),
+          onEditSong: (i) {
+            songs.selectedSongIndex = i;
+            _openSongSlideEditor();
+          },
+          onDeleteSong: _deleteSong,
+          onBack: () => Navigator.of(context).pop(),
+        ),
+      ),
+    ));
+  }
+
+  /// Bottom sheet with the custom text-slide queue (cast / delete / add).
+  void _openCustomSlidesSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: kBg3,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheet) => SafeArea(
+          top: false,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(sheetCtx).size.height * 0.7),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 14, 10, 6),
+                child: Row(children: [
+                  const Text('My Slides',
+                      style: TextStyle(
+                          color: kText,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(sheetCtx);
+                      _showAddSlideModal();
+                    },
+                    icon: const Icon(Icons.add_rounded,
+                        size: 16, color: AppColors.cyan),
+                    label: const Text('Add',
+                        style: TextStyle(color: AppColors.cyan)),
+                  ),
+                ]),
+              ),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                  itemCount: _slides.length,
+                  itemBuilder: (ctx, i) {
+                    final active = i == _activeSlide;
+                    return GestureDetector(
+                      onTap: () {
+                        _castSlide(i);
+                        setSheet(() {});
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: active
+                              ? const Color(0xFF0c1f3a)
+                              : kBg,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: active
+                                  ? AppColors.cyan.withOpacity(0.7)
+                                  : kBorder),
+                        ),
+                        child: Row(children: [
+                          Text('${i + 1}',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontFamily: 'monospace',
+                                  color: active
+                                      ? AppColors.cyan
+                                      : kMuted)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(_slides[i]['title'] ?? '',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: active ? kText : kMuted)),
+                          ),
+                          if (active)
+                            const Icon(Icons.cast,
+                                size: 14, color: AppColors.cyan),
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            onTap: () {
+                              if (_slides.length > 1) _deleteSlide(i);
+                              setSheet(() {});
+                            },
+                            child: Icon(Icons.delete_outline,
+                                size: 15,
+                                color: _slides.length > 1
+                                    ? Colors.red.shade300
+                                    : Colors.white12),
+                          ),
+                        ]),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Uploads a bundled background asset to the local server and pushes it to
+  /// the TV through the existing update-background path.
+  Future<void> _applyAssetBackground(SlideLibraryItem item) async {
+    try {
+      final data = await rootBundle.load(item.asset);
+      final bytes = data.buffer.asUint8List();
+      final name =
+          item.name.toLowerCase().replaceAll(RegExp(r'\s+'), '_') + '.png';
+      final uri = Uri.parse(
+          'http://127.0.0.1:${SlideRenderer.serverPort}/api/upload?name='
+          '${Uri.encodeComponent(name)}');
+      final response = await http.post(uri, body: bytes);
+      if (response.statusCode != 200) {
+        _showSnack('Upload fail: ${response.statusCode}', error: true);
+        return;
+      }
+      final data2 = jsonDecode(response.body) as Map<String, dynamic>;
+      final rel = data2['url'] as String? ?? '';
+      final ip = _deviceIp == '...' ? '127.0.0.1' : _deviceIp;
+      final fullUrl = 'http://$ip:${SlideRenderer.serverPort}$rel';
+      setState(() {
+        _bgUrl = fullUrl;
+        _appliedBgAsset = item.asset;
+        if (!_uploadedBgs.any((b) => b['name'] == name)) {
+          _uploadedBgs.insert(0, {'name': name, 'url': fullUrl});
+        }
+      });
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('current_bg_url', fullUrl);
+      } catch (_) {}
+      _emit('update-background', {'url': fullUrl});
+      _showSnack('${item.name} sent to TV!');
+    } catch (e) {
+      _showSnack('Background error: $e', error: true);
+    }
   }
 
   void _showCastDialog() {
@@ -3079,6 +3278,62 @@ class _ControllerPageState extends State<ControllerPage>
       );
     }
 
+    // ── Redesigned shell: bottom navigation + 4 root tabs (v7) ──
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: IndexedStack(index: _navIndex, children: [
+        // Tab 0 · Home dashboard
+        HomeScreen(
+          onOpenSlides: _openSlidesHub,
+          onOpenSongs: _openSongsHub,
+          onOpenBible: () => setState(() => _navIndex = 1),
+          onOpenFiles: () => setState(() => _navIndex = 2),
+          onOpenSettings: () => setState(() => _navIndex = 3),
+          onCastToTV: _showCastDialog,
+        ),
+        // Tab 1 · Preview (Bible)
+        BibleHubScreen(
+          onPrevVerse: _prevVerse,
+          onNextVerse: _nextVerse,
+          onCastVerse: _openBiblePresenter,
+          onImportLanguage: _importBibleLanguage,
+        ),
+        // Tab 2 · Library (Files)
+        FilesHubScreen(
+          uploadedFiles: _uploadedFiles,
+          isUploading: _isUploading,
+          activeFileIndex: _activeFileIndex,
+          ytUrlCtrl: _ytUrlCtrl,
+          onPickAndUploadFile: _pickAndUploadFile,
+          onCastFile: _castFileAndPresent,
+          onDeleteFile: _deleteUploadedFile,
+          onCastYouTubeUrl: _castYouTubeUrl,
+          onBack: () => setState(() => _navIndex = 0),
+        ),
+        // Tab 3 · More (Settings)
+        SettingsHubScreen(
+          serverStarted: _serverStarted,
+          connected:
+              _connected || _dlna.isConnected || _castService.isConnected,
+          deviceIp: _deviceIp,
+          onCopyUrl: _copyUrl,
+          onCastToTV: _showCastDialog,
+          onClassicUI: _openClassicInterface,
+          onBack: () => setState(() => _navIndex = 0),
+        ),
+      ]),
+      bottomNavigationBar: AppBottomNav(
+        currentIndex: _navIndex,
+        onTap: (i) => setState(() => _navIndex = i),
+      ),
+      floatingActionButton: _buildConnectionFab(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  /// Classic 5-tab interface (advanced escape hatch): keeps the full
+  /// video / YouTube remote, logo upload and song export reachable.
+  Widget _buildClassicScaffold() {
     return Scaffold(
       backgroundColor: kBg,
       body: SafeArea(
@@ -3254,7 +3509,135 @@ class _ControllerPageState extends State<ControllerPage>
     floatingActionButton: _buildConnectionFab(),
     floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
   );
-}
+  }
+
+  void _openClassicInterface() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => _ClassicScreen(parent: this),
+    ));
+  }
+
+  PreferredSizeWidget _buildAppBar() => AppBar(
+        backgroundColor: kBg2,
+        elevation: 0,
+        titleSpacing: 12,
+        title: Row(children: [
+          Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                      colors: [kAccent, Color(0xFF6366F1)]),
+                  borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.cast, size: 16, color: Colors.white)),
+          const SizedBox(width: 8),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('BiblePresenter',
+                style: TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.bold, color: kText)),
+            Row(children: [
+              Icon(Icons.circle,
+                  size: 6, color: _connected ? Colors.green : Colors.red),
+              const SizedBox(width: 4),
+              Text(
+                  _serverStarted
+                      ? (_connected ? 'Server live' : 'Connecting...')
+                      : 'Starting server...',
+                  style: TextStyle(
+                      fontSize: 9, color: _connected ? Colors.green : kMuted)),
+              if (_tvState['type'] != null && _tvState['type'] != 'idle') ...[
+                const SizedBox(width: 8),
+                Icon(
+                    _tvState['type'] == 'verse'
+                        ? Icons.menu_book
+                        : _tvState['type'] == 'slide'
+                            ? Icons.slideshow
+                            : _tvState['type'] == 'song'
+                                ? Icons.music_note
+                                : _tvState['type'] == 'pdf'
+                                    ? Icons.picture_as_pdf
+                                    : _tvState['type'] == 'pptx'
+                                        ? Icons.slideshow
+                                        : _tvState['type'] == 'logo'
+                                            ? Icons.image
+                                            : _tvState['type'] == 'welcome'
+                                                ? Icons.waving_hand
+                                                : Icons.cast,
+                    size: 10,
+                    color: kAccent),
+                const SizedBox(width: 2),
+                Text(
+                    _tvState['type'] == 'verse'
+                        ? 'Verse'
+                        : _tvState['type'] == 'slide'
+                            ? 'Slide'
+                            : _tvState['type'] == 'song'
+                                ? 'Song'
+                                : _tvState['type'] == 'pdf'
+                                    ? 'PDF'
+                                    : _tvState['type'] == 'pptx'
+                                        ? 'PPT'
+                                        : _tvState['type'] == 'logo'
+                                            ? 'Logo'
+                                            : _tvState['type'] == 'welcome'
+                                                ? 'Welcome'
+                                                : '',
+                    style: const TextStyle(
+                        color: kAccent,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold)),
+              ],
+            ]),
+          ]),
+        ]),
+        actions: [
+          IconButton(
+              onPressed: _castWelcome,
+              icon: Icon(Icons.waving_hand,
+                  size: 18, color: Colors.green.shade400),
+              tooltip: 'Welcome',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36)),
+          IconButton(
+              onPressed: _castLogo,
+              icon:
+                  Image.asset('assets/church_logo.png', width: 18, height: 18),
+              tooltip: 'Church Logo',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36)),
+          IconButton(
+              onPressed: _clearScreen,
+              icon: Icon(Icons.dark_mode, size: 18, color: Colors.red.shade300),
+              tooltip: 'Blackout',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36)),
+          const SizedBox(width: 4),
+        ],
+      );
+
+  Widget _buildTabBar() => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF080f1e),
+          border: Border(bottom: BorderSide(color: kBorder)),
+        ),
+        child: TabBar(
+          controller: _tabController,
+          indicatorColor: kAccent,
+          indicatorWeight: 3,
+          indicatorSize: TabBarIndicatorSize.tab,
+          labelColor: kAccent,
+          unselectedLabelColor: kMuted,
+          splashFactory: InkRipple.splashFactory,
+          labelStyle: const TextStyle(
+              fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
+          tabs: const [
+            Tab(icon: Icon(Icons.slideshow, size: 16), text: 'SLIDES'),
+            Tab(icon: Icon(Icons.menu_book, size: 16), text: 'BIBLE'),
+            Tab(icon: Icon(Icons.music_note, size: 16), text: 'SONGS'),
+            Tab(icon: Icon(Icons.upload_file, size: 16), text: 'FILES'),
+            Tab(icon: Icon(Icons.tune, size: 16), text: 'SETTINGS'),
+          ],
+        ),
+      );
 
   // ══════════════════ FLOATING TV CONNECTION BUTTON & SHEET ══════════════════
 
@@ -3617,128 +4000,6 @@ class _ControllerPageState extends State<ControllerPage>
     return const SizedBox.shrink();
   }
 
-  PreferredSizeWidget _buildAppBar() => AppBar(
-        backgroundColor: kBg2,
-        elevation: 0,
-        titleSpacing: 12,
-        title: Row(children: [
-          Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                      colors: [kAccent, Color(0xFF6366F1)]),
-                  borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.cast, size: 16, color: Colors.white)),
-          const SizedBox(width: 8),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('BiblePresenter',
-                style: TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.bold, color: kText)),
-            Row(children: [
-              Icon(Icons.circle,
-                  size: 6, color: _connected ? Colors.green : Colors.red),
-              const SizedBox(width: 4),
-              Text(
-                  _serverStarted
-                      ? (_connected ? 'Server live' : 'Connecting...')
-                      : 'Starting server...',
-                  style: TextStyle(
-                      fontSize: 9, color: _connected ? Colors.green : kMuted)),
-              if (_tvState['type'] != null && _tvState['type'] != 'idle') ...[
-                const SizedBox(width: 8),
-                Icon(
-                    _tvState['type'] == 'verse'
-                        ? Icons.menu_book
-                        : _tvState['type'] == 'slide'
-                            ? Icons.slideshow
-                            : _tvState['type'] == 'song'
-                                ? Icons.music_note
-                                : _tvState['type'] == 'pdf'
-                                    ? Icons.picture_as_pdf
-                                    : _tvState['type'] == 'pptx'
-                                        ? Icons.slideshow
-                                        : _tvState['type'] == 'logo'
-                                            ? Icons.image
-                                            : _tvState['type'] == 'welcome'
-                                                ? Icons.waving_hand
-                                                : Icons.cast,
-                    size: 10,
-                    color: kAccent),
-                const SizedBox(width: 2),
-                Text(
-                    _tvState['type'] == 'verse'
-                        ? 'Verse'
-                        : _tvState['type'] == 'slide'
-                            ? 'Slide'
-                            : _tvState['type'] == 'song'
-                                ? 'Song'
-                                : _tvState['type'] == 'pdf'
-                                    ? 'PDF'
-                                    : _tvState['type'] == 'pptx'
-                                        ? 'PPT'
-                                        : _tvState['type'] == 'logo'
-                                            ? 'Logo'
-                                            : _tvState['type'] == 'welcome'
-                                                ? 'Welcome'
-                                                : '',
-                    style: const TextStyle(
-                        color: kAccent,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold)),
-              ],
-            ]),
-          ]),
-        ]),
-        actions: [
-          IconButton(
-              onPressed: _castWelcome,
-              icon: Icon(Icons.waving_hand,
-                  size: 18, color: Colors.green.shade400),
-              tooltip: 'Welcome',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36)),
-          IconButton(
-              onPressed: _castLogo,
-              icon:
-                  Image.asset('assets/church_logo.png', width: 18, height: 18),
-              tooltip: 'Church Logo',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36)),
-          IconButton(
-              onPressed: _clearScreen,
-              icon: Icon(Icons.dark_mode, size: 18, color: Colors.red.shade300),
-              tooltip: 'Blackout',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36)),
-          const SizedBox(width: 4),
-        ],
-      );
-
-  Widget _buildTabBar() => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF080f1e),
-          border: Border(bottom: BorderSide(color: kBorder)),
-        ),
-        child: TabBar(
-          controller: _tabController,
-          indicatorColor: kAccent,
-          indicatorWeight: 3,
-          indicatorSize: TabBarIndicatorSize.tab,
-          labelColor: kAccent,
-          unselectedLabelColor: kMuted,
-          splashFactory: InkRipple.splashFactory,
-          labelStyle: const TextStyle(
-              fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
-          tabs: const [
-            Tab(icon: Icon(Icons.slideshow, size: 16), text: 'SLIDES'),
-            Tab(icon: Icon(Icons.menu_book, size: 16), text: 'BIBLE'),
-            Tab(icon: Icon(Icons.music_note, size: 16), text: 'SONGS'),
-            Tab(icon: Icon(Icons.upload_file, size: 16), text: 'FILES'),
-            Tab(icon: Icon(Icons.tune, size: 16), text: 'SETTINGS'),
-          ],
-        ),
-      );
-
   Widget _bottomUrlBar(
           {VoidCallback? onCastTap, VoidCallback? onRefreshIpTap}) =>
       Container(
@@ -3828,4 +4089,13 @@ class _ControllerPageState extends State<ControllerPage>
           ),
         ),
       );
+}
+
+/// Renders the classic 5-tab interface as a pushed route. All state and
+/// callbacks stay owned by the parent [ControllerPage] state.
+class _ClassicScreen extends StatelessWidget {
+  final _ControllerPageState parent;
+  const _ClassicScreen({required this.parent});
+  @override
+  Widget build(BuildContext context) => parent._buildClassicScaffold();
 }

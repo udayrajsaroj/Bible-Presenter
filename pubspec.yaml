@@ -60,3 +60,12 @@ flutter:
     - assets/songs.json
     - assets/church_logo.png
     - assets/icon/app_icon.png
+    - assets/icon/app_icon_foreground.png
+    - assets/backgrounds/hero_verse.png
+    - assets/backgrounds/slide_church.png
+    - assets/backgrounds/slide_mountains.png
+    - assets/backgrounds/slide_birds.png
+    - assets/backgrounds/slide_flowers.png
+    - assets/backgrounds/slide_ocean.png
+    - assets/backgrounds/slide_neon.png
+    - assets/backgrounds/slide_bokeh.png
