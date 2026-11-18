@@ -370,6 +370,14 @@ Future<void> startServer(dynamic message) async {
           final data = msg['data'] as Map<String, dynamic>? ?? {};
 
           switch (event) {
+            case 'tv-connected':
+              if (sendPort is SendPort) {
+                try {
+                  sendPort.send({'event': 'tv_connected'});
+                } catch (_) {}
+              }
+              break;
+
             case 'get-state':
               try {
                 channel.sink.add(jsonEncode(_currentState));

@@ -1073,7 +1073,10 @@ const String tvHtmlContent = r'''
 
     ws.onopen = () => {
       setStatus(true);
-      ws.send(JSON.stringify({ event: 'get-state' }));
+      try {
+        ws.send(JSON.stringify({ event: 'tv-connected' }));
+        ws.send(JSON.stringify({ event: 'get-state' }));
+      } catch(_) {}
     };
     ws.onclose = () => {
       setStatus(false);

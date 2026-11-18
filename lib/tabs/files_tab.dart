@@ -150,7 +150,7 @@ class FilesTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final isVideoActive = tvState['type'] == 'video';
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 84),
       child: Column(children: [
         // Upload button
         appCard(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

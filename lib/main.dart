@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -100,11 +99,6 @@ class _ControllerPageState extends State<ControllerPage>
   String _deviceIp = '...';
   Map<String, dynamic> _tvState = {'type': 'idle'};
 
-  // ── Collapsible chrome (scroll-driven + Focus Mode) ──
-  bool _chromeVisible = true;
-  bool _focusMode = false;
-  double _scrollHideAccum = 0;
-
   /// Mirror of _tvState for routes outside this widget's tree (the
   /// presenter screens listen to it so the LIVE pill stays current).
   final ValueNotifier<Map<String, dynamic>> tvStateN =
@@ -186,6 +180,10 @@ class _ControllerPageState extends State<ControllerPage>
   // ── Cast Service (Chromecast & AirPlay via Pigeon) ──
   final CastService _castService = CastService();
 
+  // ── Connection state tracking for notifications ──
+  bool _prevDlnaConnected = false;
+  bool _prevCastConnected = false;
+
   // ── Dialog state ──
   final _songTitleCtrl = TextEditingController();
   final _songSearchCtrl = TextEditingController();
@@ -203,15 +201,44 @@ class _ControllerPageState extends State<ControllerPage>
     // Register the Pigeon Flutter API handler so native → Flutter callbacks work
     CastFlutterApi.setUp(_castService);
     _dlna.addListener(_onDlnaChanged);
+    _castService.addListener(_onCastChanged);
     _boot();
   }
 
   void _onDlnaChanged() {
     if (mounted) setState(() {});
+    final nowConnected = _dlna.isConnected;
+    if (!_prevDlnaConnected && nowConnected) {
+      final devName = _dlna.connectedName ?? '';
+      final name = devName.isNotEmpty ? ' ($devName)' : '';
+      TopNotification.show(
+        context,
+        'TV connected successfully$name',
+        icon: Icons.check_circle_outline,
+      );
+    }
+    _prevDlnaConnected = nowConnected;
     // Renderer went offline (TV powered off, Wi-Fi drop) — tell the user.
     if (_dlna.rendererOffline) {
       _showSnack('TV disconnected — check Wi-Fi or Reconnect', error: true);
     }
+  }
+
+  void _onCastChanged() {
+    if (mounted) setState(() {});
+    final nowConnected = _castService.isConnected;
+    if (!_prevCastConnected && nowConnected) {
+      final name = (_castService.connectedDeviceName.isNotEmpty &&
+              _castService.connectedDeviceName != 'Connecting...')
+          ? ' (${_castService.connectedDeviceName})'
+          : '';
+      TopNotification.show(
+        context,
+        'TV connected successfully$name',
+        icon: Icons.check_circle_outline,
+      );
+    }
+    _prevCastConnected = nowConnected;
   }
 
   // ══════════════════ NETWORK RESOLUTION ══════════════════
@@ -282,10 +309,21 @@ class _ControllerPageState extends State<ControllerPage>
       final uploadPath = '${appDir.path}/biblepresenter_uploads';
       await Isolate.spawn(startServer, [uploadPath, receivePort.sendPort]);
       receivePort.listen((msg) {
-        if (msg is Map && msg.containsKey('port')) {
-          final p = msg['port'] as int;
-          serverPort = p;
-          SlideRenderer.serverPort = p;
+        if (msg is Map) {
+          if (msg.containsKey('port')) {
+            final p = msg['port'] as int;
+            serverPort = p;
+            SlideRenderer.serverPort = p;
+          }
+          if (msg['event'] == 'tv_connected') {
+            if (mounted) {
+              TopNotification.show(
+                context,
+                'TV connected successfully (Browser)',
+                icon: Icons.check_circle_outline,
+              );
+            }
+          }
         }
       });
     } catch (e) {
@@ -1165,7 +1203,6 @@ class _ControllerPageState extends State<ControllerPage>
       return;
     }
     await _dlna.connect(alive);
-    _showSnack('Connected ✓  ${_dlna.connectedName}');
     await _castCurrentToDlna();
   }
 
@@ -2722,6 +2759,7 @@ class _ControllerPageState extends State<ControllerPage>
       c.dispose();
     }
     _dlna.removeListener(_onDlnaChanged);
+    _castService.removeListener(_onCastChanged);
     // Mark cast service as disposed FIRST so any pending native callbacks
     // (e.g. onDisconnected arriving on app close) become no-ops. Then
     // tear down the native side without awaiting — we're shutting down.
@@ -3027,11 +3065,9 @@ class _ControllerPageState extends State<ControllerPage>
           _buildAppBar(),
           _buildTabBar(),
           Expanded(
-            child: NotificationListener<ScrollNotification>(
-              onNotification: _onScrollNotification,
-              child: TabBarView(
-            controller: _tabController,
-            children: [
+            child: TabBarView(
+              controller: _tabController,
+              children: [
               SlidesTab(
                   slides: _slides,
                   activeSlide: _activeSlide,
@@ -3189,132 +3225,259 @@ class _ControllerPageState extends State<ControllerPage>
               ),
             ],
           ),
-              ),
-            ),
-            // Bottom chrome (DLNA banner + URL bar) — collapses on scroll-down
-            // or Focus Mode to maximize the content stage.
-            ClipRect(
-              child: AnimatedSize(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOut,
-                child: _chromeVisible
-                    ? Column(children: [_dlnaBanner(), _bottomUrlBar()])
-                    : _chromeStrip(showBottomHandle: true),
-              ),
-            ),
-          ]),
         ),
-      );
-    }
+      ]),
+    ),
+    floatingActionButton: _buildConnectionFab(),
+    floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+  );
+}
 
-  // ══════════════════ COLLAPSIBLE CHROME / FOCUS MODE ══════════════════
+  // ══════════════════ FLOATING TV CONNECTION BUTTON & SHEET ══════════════════
 
-  void _showChrome() {
-    if (mounted) {
-      setState(() {
-        _chromeVisible = true;
-        _focusMode = false;
-        _scrollHideAccum = 0;
-      });
-    }
-  }
+  Widget _buildConnectionFab() {
+    final isConnected =
+        _dlna.isConnected || _castService.isConnected || _connected;
+    final color = isConnected ? Colors.greenAccent : kAccent;
 
-  void _hideChrome({bool focus = false}) {
-    if (mounted) {
-      setState(() {
-        _chromeVisible = false;
-        _focusMode = focus;
-        _scrollHideAccum = 0;
-      });
-    }
-  }
-
-  /// One-tap manual toggle from the bottom bar: locks the UI into a
-  /// distraction-free full-height workspace. Scroll-up restore is ignored
-  /// while locked; the floating CONTROLS pill exits.
-  void _toggleFocusMode() {
-    if (_chromeVisible) {
-      _hideChrome(focus: true);
-      _showSnack('Bottom bar hidden — tap bottom strip to restore');
-    } else {
-      _showChrome();
-    }
-  }
-
-  /// Scroll-driven auto-hide: any vertical list (songs, Bible chapters,
-  /// slides, files) collapsing both bars when scrolling down and restoring
-  /// them when scrolling up. Threshold 48px avoids jitter on slow drags.
-  bool _onScrollNotification(ScrollNotification n) {
-    if (_focusMode) return false;
-    if (n.metrics.axis != Axis.vertical) return false;
-    if (n is UserScrollNotification) {
-      _scrollHideAccum = 0;
-      if (n.direction == ScrollDirection.reverse && _chromeVisible) {
-        _hideChrome();
-      } else if (n.direction == ScrollDirection.forward && !_chromeVisible) {
-        _showChrome();
-      }
-    } else if (n is ScrollUpdateNotification) {
-      _scrollHideAccum += n.scrollDelta ?? 0;
-      if (_scrollHideAccum > 48 && _chromeVisible) {
-        _hideChrome();
-      } else if (_scrollHideAccum < -48 && !_chromeVisible) {
-        _showChrome();
-      }
-    }
-    return false;
-  }
-
-  /// Thin tap strip shown in place of a hidden chrome group.
-  Widget _chromeStrip({required bool showBottomHandle}) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _showChrome,
-        child: Container(
-          height: 24,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8, right: 4),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: isConnected
+                ? Colors.greenAccent.withOpacity(0.35)
+                : Colors.black54,
+            blurRadius: isConnected ? 12 : 8,
+            spreadRadius: isConnected ? 2 : 0,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: FloatingActionButton(
+        heroTag: 'tv_connection_fab',
+        elevation: 0,
+        highlightElevation: 0,
+        backgroundColor: const Color(0xFF0F172A),
+        shape: CircleBorder(
+          side: BorderSide(
+            color: isConnected
+                ? Colors.greenAccent.withOpacity(0.85)
+                : kAccent.withOpacity(0.5),
+            width: 1.8,
+          ),
+        ),
+        onPressed: _showConnectionBottomSheet,
+        tooltip: isConnected ? 'TV Connected — Tap to manage' : 'Cast to TV',
+        child: Stack(
           alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: kBg2,
-            border: Border(
-                top: BorderSide(color: kBorder),
-                bottom: BorderSide(color: kBorder)),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(showBottomHandle ? Icons.expand_less : Icons.expand_more,
-                size: 13, color: kMuted),
-            const SizedBox(width: 6),
-            const Text('TAP TO SHOW CONTROLS',
-                style: TextStyle(
-                    color: kMuted,
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2)),
-          ]),
+          children: [
+            Icon(
+              isConnected ? Icons.tv : Icons.cast,
+              color: color,
+              size: 24,
+            ),
+            if (isConnected)
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    color: Colors.greenAccent,
+                    shape: BoxShape.circle,
+                    border:
+                        Border.all(color: const Color(0xFF0F172A), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.greenAccent.withOpacity(0.9),
+                        blurRadius: 4,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
-      );
+      ),
+    );
+  }
 
-  /// Floating pill (top-right) that restores the bars when hidden.
-  Widget _focusExitPill() => Material(
-        color: kBg2.withOpacity(0.94),
-        shape: StadiumBorder(
-            side: BorderSide(color: kAccent.withOpacity(0.5))),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(999),
-          onTap: _showChrome,
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.center_focus_weak, size: 14, color: kAccent),
-              SizedBox(width: 6),
-              Text('CONTROLS',
-                  style: TextStyle(
-                      color: kText,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2)),
-            ]),
-          ),
-        ),
-      );
+  void _showConnectionBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: kBg3,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final isConnected =
+              _dlna.isConnected || _castService.isConnected || _connected;
+          String connectedDevice = '';
+          if (_dlna.isConnected) {
+            connectedDevice = 'TV Direct · ${_dlna.connectedName ?? "TV"}';
+          } else if (_castService.isConnected) {
+            connectedDevice = 'Chromecast · ${_castService.connectedDeviceName}';
+          } else if (_connected) {
+            connectedDevice = 'Browser Connect';
+          }
+
+          return SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: kMuted.withOpacity(0.4),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: isConnected
+                                  ? Colors.greenAccent.withOpacity(0.18)
+                                  : kAccent.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              isConnected ? Icons.tv : Icons.cast,
+                              size: 18,
+                              color: isConnected ? Colors.greenAccent : kAccent,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'TV Connection & Cast',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: kText,
+                                ),
+                              ),
+                              if (isConnected && connectedDevice.isNotEmpty)
+                                Text(
+                                  connectedDevice,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.greenAccent,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: kMuted),
+                        onPressed: () => Navigator.pop(sheetContext),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_dlna.isConnected ||
+                      _dlna.rendererOffline ||
+                      _reconnectUdn.isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: _dlnaBanner(),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (_castService.isConnected) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.18),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: Colors.greenAccent,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.greenAccent.withOpacity(0.8),
+                                  blurRadius: 6,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Chromecast · ${_castService.connectedDeviceName}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () async {
+                              await _castService.disconnect();
+                              if (mounted) {
+                                setSheetState(() {});
+                                _showSnack('Chromecast disconnected');
+                              }
+                            },
+                            child: const Icon(Icons.close,
+                                size: 15, color: Colors.white70),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  _bottomUrlBar(
+                    onCastTap: () {
+                      Navigator.pop(sheetContext);
+                      _showCastDialog();
+                    },
+                    onRefreshIpTap: () async {
+                      await _refreshIp();
+                      if (mounted) setSheetState(() {});
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   /// Persistent connection surface above the URL bar (plan 9.1/9.3):
   /// connected chip, disconnect banner with one-tap reconnect, or the
@@ -3553,72 +3716,70 @@ class _ControllerPageState extends State<ControllerPage>
         ),
       );
 
-  Widget _bottomUrlBar() => Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-        decoration: const BoxDecoration(
-            color: kBg2, border: Border(top: BorderSide(color: kBorder))),
-        child: SafeArea(
-            top: false,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Row(children: [
-                const Icon(Icons.wifi, size: 13, color: kAccent),
-                const SizedBox(width: 6),
-                Expanded(
-                    child: Text('http://$_deviceIp:${SlideRenderer.serverPort}/tv.html',
-                        style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 12,
-                            color: kAccent,
-                            fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.visible,
-                        maxLines: 1,
-                        softWrap: false)),
-                const SizedBox(width: 6),
-                Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                        onTap: _refreshIp,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                            padding: const EdgeInsets.all(7),
-                            decoration: BoxDecoration(
-                                color: kAccent.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8)),
-                            child: const Icon(Icons.refresh,
-                                size: 14, color: kAccent)))),
-              ]),
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(child: _barBtn(Icons.tv, 'Cast to TV', _showCastDialog)),
-                const SizedBox(width: 8),
-                // Quick-cast indicator for Chromecast/AirPlay connection status
-                CastButton(
-                    castService: _castService,
-                    tvUrl:
-                        'http://${_deviceIp == '...' ? '' : _deviceIp}:${SlideRenderer.serverPort}/tv.html'),
-                const SizedBox(width: 8),
-                Expanded(child: _barBtn(Icons.copy, 'Copy URL', _copyUrl)),
-                const SizedBox(width: 8),
-                // Manual Focus Mode: full-height distraction-free stage.
-                Tooltip(
-                    message: 'Focus Mode — hide top & bottom bars',
-                    child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                            onTap: _toggleFocusMode,
-                            borderRadius: BorderRadius.circular(10),
-                            child: Ink(
-                                height: 42,
-                                width: 44,
-                                decoration: BoxDecoration(
-                                    color: kAccent.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                        color: kAccent.withValues(alpha: 0.4))),
-                                child: const Icon(Icons.center_focus_strong,
-                                    size: 18, color: kAccent))))),
-              ]),
-            ])),
+  Widget _bottomUrlBar(
+          {VoidCallback? onCastTap, VoidCallback? onRefreshIpTap}) =>
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: kBg2,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: kBorder),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            const Icon(Icons.wifi, size: 14, color: kAccent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'http://$_deviceIp:${SlideRenderer.serverPort}/tv.html',
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  color: kAccent,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.visible,
+                maxLines: 1,
+                softWrap: false,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onRefreshIpTap ?? _refreshIp,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: kAccent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.refresh, size: 14, color: kAccent),
+                ),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(
+              child: _barBtn(
+                Icons.tv,
+                'Cast to TV',
+                onCastTap ?? _showCastDialog,
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Quick-cast indicator for Chromecast/AirPlay connection status
+            CastButton(
+              castService: _castService,
+              tvUrl:
+                  'http://${_deviceIp == '...' ? '' : _deviceIp}:${SlideRenderer.serverPort}/tv.html',
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: _barBtn(Icons.copy, 'Copy URL', _copyUrl)),
+          ]),
+        ]),
       );
 
   Widget _barBtn(IconData icon, String text, VoidCallback onTap) => Material(

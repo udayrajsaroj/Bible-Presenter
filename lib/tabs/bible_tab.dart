@@ -68,7 +68,7 @@ class BibleTab extends StatelessWidget {
     final v = verses[selVerse];
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 84),
       child: appCard(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           label('LANGUAGES'),

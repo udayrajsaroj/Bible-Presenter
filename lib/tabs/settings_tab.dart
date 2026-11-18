@@ -57,7 +57,7 @@ class SettingsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 84),
       child: Column(children: [
         // DISPLAY section
         appCard(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

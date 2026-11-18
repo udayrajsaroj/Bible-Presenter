@@ -291,12 +291,11 @@ class _BibleDockCounter extends StatelessWidget {
 class _RefPillButton extends StatelessWidget {
   final String text;
   final VoidCallback onTap;
-  final Color accent;
+  static const Color accent = kGold;
 
   const _RefPillButton({
     required this.text,
     required this.onTap,
-    this.accent = kGold,
   });
 
   @override

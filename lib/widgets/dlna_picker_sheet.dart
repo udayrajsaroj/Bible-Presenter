@@ -6,7 +6,6 @@ import 'package:media_cast_dlna/media_cast_dlna.dart' hide DlnaService;
 
 import '../dlna_service.dart';
 import '../theme.dart';
-import 'top_notification.dart';
 
 /// Device picker bottom sheet (plan 9.2) — the only screen where the user
 /// chooses a TV. Opens with discovery already running (pre-warmed at cast
@@ -96,12 +95,6 @@ class _DlnaPickerSheetState extends State<DlnaPickerSheet> {
       BuildContext sheetContext, DlnaDevice device) async {
     Navigator.of(sheetContext).pop();
     await _dlna.connect(device);
-    // "Connected ✓" confirmation for ~2 s (plan Table 7), then the
-    // controller pushes whatever is currently on the presentation screen.
-    if (mounted) {
-      TopNotification.show(this.context, 'Connected ✓  ${device.friendlyName}');
-    }
-    await Future.delayed(const Duration(seconds: 2));
     widget.onDeviceSelected(device);
   }
 

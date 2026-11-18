@@ -644,6 +644,9 @@ class SongsTab extends StatelessWidget {
                     ),
                   ),
                 ),
+              const SliverToBoxAdapter(
+                child: SizedBox(height: 84),
+              ),
             ],
           ),
         ),

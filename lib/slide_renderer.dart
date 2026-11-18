@@ -5,9 +5,6 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/scheduler.dart';
-import 'package:image/image.dart' as img;
-import 'widgets/shared_widgets.dart';
 
 /// Off-screen slide renderer for DLNA "TV Direct" casting (Phase D1).
 ///
@@ -92,6 +89,7 @@ class SlideRenderer {
       final image = await repaintBoundary.toImage(pixelRatio: 1.0);
       try {
         rootLayer.detach();
+        // ignore: invalid_use_of_visible_for_overriding_member
         rootElement.unmount();
       } catch (_) {}
 
@@ -223,7 +221,7 @@ class SlideRenderer {
       localFile = File(url.replaceFirst('file://', ''));
     } else if (url.contains('/uploads/')) {
       final fileName = Uri.tryParse(url)?.pathSegments.last;
-      if (fileName != null && uploadDirPath != null) {
+      if (fileName != null && uploadDirPath.isNotEmpty) {
         final f = File('$uploadDirPath/$fileName');
         if (f.existsSync()) localFile = f;
       }
@@ -407,20 +405,6 @@ class SlideRenderer {
       default:
         return _idleContent();
     }
-  }
-
-  /// Port of tv.html fontSize(): shrink stepwise as text grows.
-  static double _autoFontSize(String text, num base) {
-    final scale = text.length > 350
-        ? 0.5
-        : text.length > 250
-            ? 0.64
-            : text.length > 160
-                ? 0.78
-                : text.length > 90
-                    ? 0.92
-                    : 1.0;
-    return (base * scale).clamp(16.0, 200.0).toDouble();
   }
 
   /// Port of tv.html songFontSize().

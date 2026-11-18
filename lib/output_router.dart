@@ -26,11 +26,7 @@ class OutputRouter {
   OutputRouter._();
   static final OutputRouter instance = OutputRouter._();
 
-  static const _debounceDuration = Duration(milliseconds: 200);
-
   Timer? _debounce;
-  Map<String, dynamic>? _pending;
-  BuildContext? _pendingContext;
 
   // Pre-render cache: state key → PNG/JPG bytes (small LRU).
   static const _cacheMax = 20;
@@ -205,8 +201,6 @@ class OutputRouter {
 
   void _cancelPending() {
     _debounce?.cancel();
-    _pending = null;
-    _pendingContext = null;
   }
 
   // ── Render + publish + push ──
