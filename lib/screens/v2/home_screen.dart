@@ -3,34 +3,48 @@ import 'package:provider/provider.dart';
 
 import '../../state/bible_state.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/presenter_shell.dart';
 
-/// Screen 1 — Home dashboard: glowing emblem header, hero verse-of-the-day
-/// card, the 2×2 feature grid and the Cast to TV banner.
+/// Screen 1 — Home dashboard: compact presenter-style header (title + LIVE
+/// pill + Logo / Blackout / Settings quick actions, mirroring the header used
+/// for logo and blackout presentation), hero verse-of-the-day card, the 2×2
+/// feature grid and the Cast to TV banner.
 class HomeScreen extends StatelessWidget {
+  final ValueNotifier<Map<String, dynamic>> tvState;
   final VoidCallback onOpenSlides;
   final VoidCallback onOpenSongs;
   final VoidCallback onOpenBible;
   final VoidCallback onOpenFiles;
   final VoidCallback onOpenSettings;
+  final VoidCallback onCastLogo;
+  final VoidCallback onCastBlackout;
   final VoidCallback onCastToTV;
 
   const HomeScreen({
     super.key,
+    required this.tvState,
     required this.onOpenSlides,
     required this.onOpenSongs,
     required this.onOpenBible,
     required this.onOpenFiles,
     required this.onOpenSettings,
+    required this.onCastLogo,
+    required this.onCastBlackout,
     required this.onCastToTV,
   });
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 24),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _Header(onSettings: onOpenSettings),
-        const SizedBox(height: 18),
+        _Header(
+          tvState: tvState,
+          onSettings: onOpenSettings,
+          onCastLogo: onCastLogo,
+          onCastBlackout: onCastBlackout,
+        ),
+        const SizedBox(height: 14),
         const _HeroVerseCard(),
         const SizedBox(height: 18),
         _FeatureGrid(
@@ -46,115 +60,112 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// ── Header ──────────────────────────────────────────────────────────────────
+// ── Header (presenter-style compact bar) ────────────────────────────────────
 
+/// Same design as the presenter screens' header (`PresenterScaffold`): small
+/// brand mark + bold title/subtitle on the left, LIVE ON TV / OFF AIR pill,
+/// and the Logo / Blackout / Settings quick-action icon buttons on the right.
 class _Header extends StatelessWidget {
+  final ValueNotifier<Map<String, dynamic>> tvState;
   final VoidCallback onSettings;
-  const _Header({required this.onSettings});
+  final VoidCallback onCastLogo;
+  final VoidCallback onCastBlackout;
+
+  const _Header({
+    required this.tvState,
+    required this.onSettings,
+    required this.onCastLogo,
+    required this.onCastBlackout,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Stack(children: [
-      Column(children: [
-        const SizedBox(height: 8),
-        const _Emblem(),
-        const SizedBox(height: 12),
-        const Text('BiblePresenter',
-            style: TextStyle(
-                color: AppColors.textHigh,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.3)),
-        const SizedBox(height: 4),
-        const Text('Present • Worship • Share',
-            style: TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 12.5,
-                letterSpacing: 1.1)),
-        const SizedBox(height: 10),
-      ]),
-      // Settings gear — top-right action.
-      Positioned(
-        top: 0,
-        right: 0,
-        child: IconButton(
-          tooltip: 'Settings',
-          onPressed: onSettings,
-          icon: const Icon(Icons.settings_outlined,
-              color: AppColors.textMuted, size: 24),
+    return Container(
+      height: 60,
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.borderGlow, width: 1),
         ),
       ),
-    ]);
-  }
-}
-
-/// Centered glowing emblem: golden open Bible with a radiant cross above,
-/// white/gold light rays behind (built from a radial bloom + drawn cross).
-class _Emblem extends StatelessWidget {
-  const _Emblem();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 150,
-      height: 120,
-      child: Stack(alignment: Alignment.center, children: [
-        // Radiant glow behind the emblem.
-        Container(
-          width: 150,
-          height: 120,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(colors: [
-              Colors.amber.withOpacity(0.38),
-              Colors.amber.withOpacity(0.10),
-              Colors.transparent,
-            ], stops: const [0.0, 0.55, 1.0]),
+      child: Row(children: [
+        const _BrandMark(),
+        const SizedBox(width: 12),
+        const Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('BiblePresenter',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: AppColors.textHigh,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.3)),
+              SizedBox(height: 2),
+              Text('Present • Worship • Share',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 10.5,
+                      height: 1.3,
+                      letterSpacing: 0.8)),
+            ],
           ),
         ),
-        Column(mainAxisSize: MainAxisSize.min, children: [
-          // The cross — two rounded golden bars with a soft glow.
-          Container(
-            width: 44,
-            height: 52,
-            decoration: BoxDecoration(
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.amberAccent.withOpacity(0.55),
-                    blurRadius: 22,
-                    spreadRadius: 2),
-              ],
-            ),
-            child: CustomPaint(painter: _CrossPainter()),
-          ),
-          const SizedBox(height: 6),
-          // Open golden Bible.
-          const Icon(Icons.menu_book_rounded,
-              size: 40, color: Color(0xFFF5C842)),
-        ]),
+        const SizedBox(width: 6),
+        LivePill(tvState: tvState),
+        // Quick presentation actions — same trio the presenter headers carry.
+        PresenterIconButton(
+          icon: Icons.church,
+          color: AppColors.gold,
+          tooltip: 'Cast Logo',
+          onTap: onCastLogo,
+        ),
+        PresenterIconButton(
+          icon: Icons.dark_mode,
+          color: Colors.red.shade400,
+          tooltip: 'Blackout',
+          onTap: onCastBlackout,
+        ),
+        PresenterIconButton(
+          icon: Icons.settings_outlined,
+          color: AppColors.textMuted,
+          tooltip: 'Settings',
+          onTap: onSettings,
+        ),
       ]),
     );
   }
 }
 
-class _CrossPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFF5C842)
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = size.width * 0.16;
-    final cx = size.width / 2;
-    // Vertical beam.
-    canvas.drawLine(Offset(cx, size.height * 0.06),
-        Offset(cx, size.height * 0.94), paint);
-    // Horizontal beam (classic Latin cross proportions).
-    canvas.drawLine(Offset(size.width * 0.14, size.height * 0.32),
-        Offset(size.width * 0.86, size.height * 0.32), paint);
-  }
+/// Small brand mark for the leading slot — a compact glass chip holding the
+/// golden open Bible with a soft amber glow (the emblem, miniaturized).
+class _BrandMark extends StatelessWidget {
+  const _BrandMark();
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.amber.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.amber.withOpacity(0.35)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.amber.withOpacity(0.22),
+              blurRadius: 14,
+              spreadRadius: 1),
+        ],
+      ),
+      child: const Icon(Icons.menu_book_rounded,
+          size: 22, color: Color(0xFFF5C842)),
+    );
+  }
 }
 
 // ── Hero verse card ─────────────────────────────────────────────────────────

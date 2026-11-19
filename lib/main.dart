@@ -870,6 +870,16 @@ class _ControllerPageState extends State<ControllerPage>
     }
   }
 
+  /// Removes the custom church logo (v2 Settings + classic Settings tab).
+  Future<void> _removeCustomLogo() async {
+    final confirmed = await _confirmDelete('custom logo');
+    if (!confirmed) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('custom_logo_base64');
+    setState(() => _customLogoPath = '');
+    _showSnack('Custom logo removed');
+  }
+
   // ══════════════════ SCREEN MIRRORING / FULL-SCREEN ══════════════════
   Future<void> _openScreenMirrorSettings() async {
     try {
@@ -1403,6 +1413,20 @@ class _ControllerPageState extends State<ControllerPage>
     }
     await _dlna.connect(alive);
     await _castCurrentToDlna();
+  }
+
+  /// Clears the remembered TV (Settings → My TV → Forget).
+  Future<void> _forgetStoredTv() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('dlna_last_udn');
+      await prefs.remove('dlna_last_name');
+    } catch (_) {}
+    setState(() {
+      _reconnectName = '';
+      _reconnectUdn = '';
+    });
+    _showSnack('TV removed — it will be forgotten until you cast again');
   }
 
   // ══════════════════ DLNA TV DIRECT (Feature 1) ══════════════════
@@ -3284,11 +3308,14 @@ class _ControllerPageState extends State<ControllerPage>
       body: IndexedStack(index: _navIndex, children: [
         // Tab 0 · Home dashboard
         HomeScreen(
+          tvState: tvStateN,
           onOpenSlides: _openSlidesHub,
           onOpenSongs: _openSongsHub,
           onOpenBible: () => setState(() => _navIndex = 1),
           onOpenFiles: () => setState(() => _navIndex = 2),
           onOpenSettings: () => setState(() => _navIndex = 3),
+          onCastLogo: _castLogo,
+          onCastBlackout: _castBlackout,
           onCastToTV: _showCastDialog,
         ),
         // Tab 1 · Preview (Bible)
@@ -3316,6 +3343,18 @@ class _ControllerPageState extends State<ControllerPage>
           connected:
               _connected || _dlna.isConnected || _castService.isConnected,
           deviceIp: _deviceIp,
+          storedTvName: _reconnectName,
+          onReconnectTv: _reconnectFromBanner,
+          onForgetTv: _forgetStoredTv,
+          welcomeMsgCtrl: _welcomeMsgCtrl,
+          onWelcomeMessageChanged: (val) async {
+            setState(() => _welcomeMessage = val);
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('welcome_message', val);
+          },
+          customLogoPath: _customLogoPath,
+          onUploadLogo: _uploadCustomLogo,
+          onRemoveLogo: _removeCustomLogo,
           onCopyUrl: _copyUrl,
           onCastToTV: _showCastDialog,
           onClassicUI: _openClassicInterface,
@@ -3465,14 +3504,7 @@ class _ControllerPageState extends State<ControllerPage>
                     onClearScreen: _clearScreen,
                     customLogoPath: _customLogoPath,
                     onUploadCustomLogo: _uploadCustomLogo,
-                    onRemoveCustomLogo: () async {
-                      final confirmed = await _confirmDelete('custom logo');
-                      if (!confirmed) return;
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.remove('custom_logo_base64');
-                      setState(() => _customLogoPath = '');
-                      _showSnack('Custom logo removed');
-                    },
+                    onRemoveCustomLogo: _removeCustomLogo,
                     onCastLogo: _castLogo,
                     bgUrl: _bgUrl,
                     onBgUrlChanged: (url) async {

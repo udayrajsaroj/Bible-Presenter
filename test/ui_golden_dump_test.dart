@@ -84,11 +84,14 @@ void main() {
     }
 
     await snap('01_home', HomeScreen(
+      tvState: ValueNotifier<Map<String, dynamic>>({'type': 'idle'}),
       onOpenSlides: () {},
       onOpenSongs: () {},
       onOpenBible: () {},
       onOpenFiles: () {},
       onOpenSettings: () {},
+      onCastLogo: () {},
+      onCastBlackout: () {},
       onCastToTV: () {},
     ));
 
