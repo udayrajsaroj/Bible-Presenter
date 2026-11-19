@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
 
 /// Off-screen slide renderer for DLNA "TV Direct" casting (Phase D1).
 ///
@@ -41,6 +45,11 @@ class SlideRenderer {
   @visibleForTesting
   static void resetSlideCounter() => _slideCounter = 0;
 
+  /// SendPort into the server isolate's RAM slide cache (set at boot). Push
+  /// newly published bytes straight into it so the TV's first GET is served
+  /// from memory instead of disk.
+  static SendPort? warmPort;
+
   /// In-memory cache of recent slide bytes: name -> bytes.
   /// Allows instant serving and verification without disk latency.
   static final Map<String, Uint8List> memorySlides = {};
@@ -54,9 +63,30 @@ class SlideRenderer {
   /// Renders [tvState] to a full-HD JPEG/PNG using a headless off-screen pipeline.
   /// Does not depend on Overlay or frame ticks, preventing assertion errors
   /// and returning immediately.
+  ///
+  /// Every image the state references (background, logo, welcome picture) is
+  /// resolved to decoded pixels BEFORE the widget tree is built: this pipeline
+  /// rasterizes the first frame synchronously, and Image.file/network/memory
+  /// widgets would still be decoding at that point — uncached backgrounds and
+  /// logos silently painted nothing (the "background sometimes missing on TV"
+  /// bug; it worked only when the phone UI had already cached the image).
   static Future<Uint8List?> capture(Map<String, dynamic> tvState,
       {BuildContext? context}) async {
     try {
+      final bgUrl =
+          (tvState['background'] as Map<String, dynamic>?)?['url'] as String? ??
+              '';
+      final content =
+          Map<String, dynamic>.from(tvState['content'] as Map? ?? {});
+      final type = tvState['type'] as String? ?? 'idle';
+      final ui.Image? bgImage = await resolveImage(bgUrl);
+      ui.Image? contentImage;
+      if (type == 'logo') {
+        contentImage = await resolveImage(content['image'] as String? ?? '');
+      } else if (type == 'welcome') {
+        contentImage = await resolveImage(content['logo'] as String? ?? '');
+      }
+
       final repaintBoundary = RenderRepaintBoundary();
       final pipelineOwner = PipelineOwner();
       final buildOwner = BuildOwner(focusManager: FocusManager());
@@ -67,7 +97,8 @@ class SlideRenderer {
           data: const MediaQueryData(size: slideSize),
           child: Directionality(
             textDirection: TextDirection.ltr,
-            child: buildSlideWidget(tvState),
+            child: buildSlideWidget(tvState,
+                bgImage: bgImage, contentImage: contentImage),
           ),
         ),
       ).attachToRenderTree(buildOwner);
@@ -93,11 +124,95 @@ class SlideRenderer {
         rootElement.unmount();
       } catch (_) {}
 
-      // Use Skia native C++ PNG encoding (instantaneous ~30-50ms, zero main-thread stall)
-      final pngData = await image.toByteData(format: ui.ImageByteFormat.png);
-      final outputBytes = pngData?.buffer.asUint8List();
+      // JPEG in a background isolate: ~5-8x smaller than the PNG the TV used
+      // to download (hundreds of ms faster on Wi-Fi), encode off the UI
+      // thread. Falls back to native PNG encoding on any failure.
+      Uint8List? outputBytes;
+      try {
+        final raw = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+        if (raw != null) {
+          final rgba = raw.buffer.asUint8List();
+          final w = image.width;
+          final h = image.height;
+          outputBytes = await Isolate.run(() => encodeJpegBytes(rgba, w, h));
+        }
+      } catch (_) {
+        outputBytes = null;
+      }
+      outputBytes ??=
+          (await image.toByteData(format: ui.ImageByteFormat.png))
+              ?.buffer
+              .asUint8List();
       image.dispose();
       return outputBytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Pure-Dart JPEG encoder entry point (runs inside Isolate.run).
+  static Uint8List? encodeJpegBytes(Uint8List rgba, int width, int height) {
+    try {
+      final decoded = img.Image.fromBytes(
+        width: width,
+        height: height,
+        bytes: rgba.buffer,
+        numChannels: 4,
+        order: img.ChannelOrder.rgba,
+      );
+      return Uint8List.fromList(img.encodeJpg(decoded, quality: 82));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Resolves any image source the app produces into decoded pixels, so the
+  /// capture pipeline can paint it with RawImage on the first frame:
+  /// data: URIs (logo/welcome), file:// paths, /uploads/ URLs (served from
+  /// the shared upload folder), bundled asset paths and http(s) URLs.
+  static Future<ui.Image?> resolveImage(String src) async {
+    if (src.isEmpty || src.startsWith('animated:')) return null;
+    Uint8List? bytes;
+    try {
+      if (src.startsWith('data:image')) {
+        final payload = src.contains(',') ? src.split(',')[1] : src;
+        bytes = base64Decode(payload);
+      } else if (src.startsWith('http://') || src.startsWith('https://')) {
+        // Local-server uploads: read straight from the shared folder —
+        // no HTTP round-trip, no DNS, works even before serving starts.
+        if (src.contains('/uploads/') && uploadDirPath.isNotEmpty) {
+          final name = Uri.tryParse(src)?.pathSegments.last;
+          if (name != null) {
+            final f = File('$uploadDirPath/$name');
+            if (f.existsSync()) bytes = f.readAsBytesSync();
+          }
+        }
+        bytes ??= (await http
+                .get(Uri.parse(src))
+                .timeout(const Duration(seconds: 5)))
+            .bodyBytes;
+      } else if (src.startsWith('file://')) {
+        final f = File(src.replaceFirst('file://', ''));
+        if (f.existsSync()) bytes = f.readAsBytesSync();
+      } else {
+        // Plain path — asset bundle first (bundled assets are inside the
+        // APK, not on the filesystem), then a filesystem path.
+        try {
+          final data = await rootBundle.load(src);
+          bytes = data.buffer.asUint8List();
+        } catch (_) {
+          final f = File(src);
+          if (f.existsSync()) bytes = f.readAsBytesSync();
+        }
+      }
+    } catch (_) {
+      return null;
+    }
+    if (bytes == null || bytes.isEmpty) return null;
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      return frame.image;
     } catch (_) {
       return null;
     }
@@ -120,6 +235,12 @@ class SlideRenderer {
     if (memorySlides.length > _maxMemorySlides) {
       memorySlides.remove(memorySlides.keys.first);
     }
+
+    // Warm the server isolate's RAM cache FIRST so the TV's GET is a memory
+    // hit even while the disk write below is still in flight. Fire-and-forget.
+    try {
+      warmPort?.send({'warm': name, 'bytes': bytes});
+    } catch (_) {}
 
     final dir = Directory('$uploadDirPath/dlna');
     if (_lastEnsuredDir != dir.path) {
@@ -158,7 +279,8 @@ class SlideRenderer {
 
   // ══════════════════ Slide widget tree (mirrors tv.html) ══════════════════
 
-  static Widget buildSlideWidget(Map<String, dynamic> tvState) {
+  static Widget buildSlideWidget(Map<String, dynamic> tvState,
+      {ui.Image? bgImage, ui.Image? contentImage}) {
     final type = tvState['type'] as String? ?? 'idle';
     final content =
         Map<String, dynamic>.from(tvState['content'] as Map? ?? {});
@@ -172,7 +294,7 @@ class SlideRenderer {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            _backgroundLayer(background),
+            _backgroundLayer(background, resolved: bgImage),
             // Vignette overlay, like #bg-overlay in tv.html.
             const DecoratedBox(
               decoration: BoxDecoration(
@@ -195,7 +317,7 @@ class SlideRenderer {
                     fit: BoxFit.scaleDown,
                     child: SizedBox(
                       width: slideSize.width - 116,
-                      child: _contentFor(type, content),
+                      child: _contentFor(type, content, contentImage),
                     ),
                   ),
                 ),
@@ -208,10 +330,21 @@ class SlideRenderer {
   }
 
   // ── Background: preset image, animated-gradient stand-in, or plain ink ──
-  static Widget _backgroundLayer(Map<String, dynamic>? background) {
+  //
+  // [resolved] is the pre-decoded image from capture()'s resolveImage pass —
+  // painted with RawImage so the headless first frame is complete. The
+  // widget-based fallback stays for callers without pre-resolved pixels.
+  static Widget _backgroundLayer(Map<String, dynamic>? background,
+      {ui.Image? resolved}) {
     final url = background?['url'] as String? ?? '';
     if (url.startsWith('animated:')) {
       return _animatedGradientStandIn(url);
+    }
+    if (resolved != null) {
+      return Opacity(
+        opacity: 0.45,
+        child: RawImage(image: resolved, fit: BoxFit.cover),
+      );
     }
     if (url.isEmpty) return const SizedBox.shrink();
 
@@ -389,7 +522,8 @@ class SlideRenderer {
   }
 
   // ── Per-type content ──
-  static Widget _contentFor(String type, Map<String, dynamic> c) {
+  static Widget _contentFor(
+      String type, Map<String, dynamic> c, ui.Image? contentImage) {
     switch (type) {
       case 'verse':
         return _verseContent(c);
@@ -398,9 +532,9 @@ class SlideRenderer {
       case 'song':
         return _songContent(c);
       case 'logo':
-        return _logoContent(c);
+        return _logoContent(c, contentImage);
       case 'welcome':
-        return _welcomeContent(c);
+        return _welcomeContent(c, contentImage);
       case 'idle':
       default:
         return _idleContent();
@@ -610,12 +744,13 @@ class SlideRenderer {
     );
   }
 
-  static Widget _logoContent(Map<String, dynamic> c) {
+  static Widget _logoContent(Map<String, dynamic> c, ui.Image? contentImage) {
     final image = c['image'] as String? ?? '';
-    return _fullBleedImage(image);
+    return _fullBleedImage(image, resolved: contentImage);
   }
 
-  static Widget _welcomeContent(Map<String, dynamic> c) {
+  static Widget _welcomeContent(
+      Map<String, dynamic> c, ui.Image? contentImage) {
     final message = c['message'] as String? ?? '';
     final logo = c['logo'] as String? ?? '';
     return ColoredBox(
@@ -628,7 +763,9 @@ class SlideRenderer {
               : MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.max,
           children: [
-            Flexible(child: _decodedImage(logo, fit: BoxFit.contain)),
+            Flexible(
+                child: _decodedImage(logo,
+                    fit: BoxFit.contain, resolved: contentImage)),
             if (message.isNotEmpty) ...[
               const SizedBox(height: 48),
               Text(
@@ -673,7 +810,10 @@ class SlideRenderer {
       );
 
   // ── Image decoding helpers ──
-  static Widget _fullBleedImage(String src) {
+  static Widget _fullBleedImage(String src, {ui.Image? resolved}) {
+    if (resolved != null) {
+      return RawImage(image: resolved, fit: BoxFit.cover);
+    }
     if (src.startsWith('data:image')) {
       return _decodedImage(src, fit: BoxFit.cover);
     }
@@ -684,7 +824,11 @@ class SlideRenderer {
 
   /// Decodes a `data:image/...;base64,<payload>` URI (the app stores the
   /// custom logo and welcome logo as base64 data URIs).
-  static Widget _decodedImage(String dataUri, {BoxFit fit = BoxFit.contain}) {
+  static Widget _decodedImage(String dataUri,
+      {BoxFit fit = BoxFit.contain, ui.Image? resolved}) {
+    if (resolved != null) {
+      return RawImage(image: resolved, fit: fit);
+    }
     final payload =
         dataUri.contains(',') ? dataUri.split(',')[1] : dataUri;
     try {

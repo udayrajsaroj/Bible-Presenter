@@ -322,6 +322,19 @@ Future<void> startServer(dynamic message) async {
   // this route serves them to the TV with an in-memory cache to eliminate disk reads.
   final Map<String, Uint8List> serverSlideCache = {};
 
+  // Main isolate pushes freshly published slide bytes straight into this
+  // isolate's RAM cache (SlideRenderer.warmPort) so the TV's first GET is a
+  // pure memory hit — no cross-isolate disk round-trip on the critical path.
+  final warmPort = ReceivePort();
+  warmPort.listen((msg) {
+    if (msg is Map && msg['warm'] is String && msg['bytes'] is Uint8List) {
+      serverSlideCache[msg['warm'] as String] = msg['bytes'] as Uint8List;
+      if (serverSlideCache.length > 10) {
+        serverSlideCache.remove(serverSlideCache.keys.first);
+      }
+    }
+  });
+
   router.get('/dlna/<file>', (Request req, String file) async {
     try {
       final safeName = file.replaceAll('..', '').split('/').last;
@@ -658,7 +671,7 @@ Future<void> startServer(dynamic message) async {
 
   if (sendPort is SendPort) {
     try {
-      sendPort.send({'port': boundPort});
+      sendPort.send({'port': boundPort, 'warmPort': warmPort.sendPort});
     } catch (_) {}
   }
 }

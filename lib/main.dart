@@ -329,6 +329,11 @@ class _ControllerPageState extends State<ControllerPage>
             serverPort = p;
             SlideRenderer.serverPort = p;
           }
+          // Server isolate's RAM slide cache entry — published slides are
+          // pushed straight into it so the TV's first GET is a memory hit.
+          if (msg['warmPort'] is SendPort) {
+            SlideRenderer.warmPort = msg['warmPort'] as SendPort;
+          }
           if (msg['event'] == 'tv_connected') {
             if (mounted) {
               TopNotification.show(
@@ -1177,7 +1182,10 @@ class _ControllerPageState extends State<ControllerPage>
                         isScrollControlled: true,
                         builder: (_) => DlnaPickerSheet(
                           onUseBrowserConnect: _copyUrl,
-                          onDeviceSelected: (_) => _castCurrentToDlna(),
+                          onDeviceSelected: (_) {
+                            _castCurrentToDlna();
+                            _warmDlnaStatics();
+                          },
                         ),
                       );
                     },
@@ -1413,6 +1421,32 @@ class _ControllerPageState extends State<ControllerPage>
     }
     await _dlna.connect(alive);
     await _castCurrentToDlna();
+    await _warmDlnaStatics();
+  }
+
+  /// Pre-renders the Logo and Welcome stills right after a TV connects so
+  /// tapping them later is an instant publish-and-play. Uses the same emit
+  /// shapes (_castLogo / _castWelcome) and the same background fallback the
+  /// router applies at cast time, so the cache keys match exactly.
+  Future<void> _warmDlnaStatics() async {
+    if (!_dlna.isConnected) return;
+    final router = OutputRouter.instance;
+    final bg =
+        _tvState['background'] ?? (_bgUrl != null ? {'url': _bgUrl} : null);
+    final logoUri = _customLogoPath.isNotEmpty
+        ? 'data:image/png;base64,$_customLogoPath'
+        : '';
+    try {
+      await router.preRender({
+        'type': 'logo',
+        'content': {'image': logoUri},
+        'background': bg,
+      }, context);
+      await router.preRender({
+        'type': 'welcome',
+        'content': {'message': _welcomeMessage, 'logo': logoUri},
+      }, context);
+    } catch (_) {}
   }
 
   /// Clears the remembered TV (Settings → My TV → Forget).
@@ -1494,6 +1528,26 @@ class _ControllerPageState extends State<ControllerPage>
                   'background': bg,
                 }, context);
               }
+            }
+
+            // One more forward look (+2): keeps double-tap verse advances
+            // instant, same state shape as the N+1 render above.
+            if (idx >= 0 && idx + 2 < vList.length) {
+              final plus2Num = vList[idx + 2];
+              final p2 = bs.bible[bs.selectedBook]?[bs.selectedChapter]?[plus2Num];
+              await OutputRouter.instance.preRender({
+                'type': 'verse',
+                'content': {
+                  'book': bs.selectedBook,
+                  'chapter': bs.selectedChapter,
+                  'verse': plus2Num,
+                  'textEn': p2?['secondary'] ?? '',
+                  'textHi': p2?['primary'] ?? '',
+                  'text': p2?['primary'] ?? p2?['secondary'] ?? '',
+                  'fontSize': bs.fontSize,
+                },
+                'background': bg,
+              }, context);
             }
 
             // Pre-render N-1 (within chapter or last verse of prev chapter)
@@ -1591,12 +1645,31 @@ class _ControllerPageState extends State<ControllerPage>
                 'background': bg,
               }, context);
             }
+            // Whole-song lookahead: pre-render every remaining stanza of the
+            // current song so jumps to any stanza are all instant (LRU holds
+            // 20 entries; songs rarely exceed ~12 stanzas).
+            if (stanzas.length > 0 && stanzas.length <= 12) {
+              for (int i = 0; i < stanzas.length; i++) {
+                if (i == cur || i == cur + 1 || i == cur - 1) continue;
+                final c2 = Map<String, dynamic>.from(content);
+                c2['currentStanza'] = i;
+                await OutputRouter.instance.preRender({
+                  'type': 'song',
+                  'content': c2,
+                  'background': bg,
+                }, context);
+              }
+            }
             break;
           case 'pdf':
             if (_pdfTotalPages > 0) {
               if (_pdfCurrentPage + 1 <= _pdfTotalPages) {
                 await OutputRouter.instance.preRenderPdfPage(
                     _currentPdfLocalPath, _pdfCurrentPage + 1, context);
+              }
+              if (_pdfCurrentPage + 2 <= _pdfTotalPages) {
+                await OutputRouter.instance.preRenderPdfPage(
+                    _currentPdfLocalPath, _pdfCurrentPage + 2, context);
               }
               if (_pdfCurrentPage > 1) {
                 await OutputRouter.instance.preRenderPdfPage(

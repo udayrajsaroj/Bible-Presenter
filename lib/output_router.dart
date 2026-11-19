@@ -33,6 +33,17 @@ class OutputRouter {
   final Map<String, Uint8List> _cache = <String, Uint8List>{};
   final List<String> _cacheOrder = <String>[];
 
+  /// Generation guard for render-push requests: every route() that ends in a
+  /// TV push bumps this; superseded results are dropped before they reach the
+  /// renderer. Without it, two quick taps race two captures and the SLOWER
+  /// (older) capture can publish + castImage last — the TV shows the previous
+  /// verse/slide while the phone shows the new one.
+  int _pushGen = 0;
+
+  /// One-time blackout still (solid black full-HD PNG, ~2 KB) — rendered once
+  /// and reused for every Blackout cast.
+  static Uint8List? _blackoutPng;
+
   /// Public check for testing and diagnostics: whether a state has been pre-rendered.
   bool hasCached(Map<String, dynamic> state) => _cache.containsKey(stateKey(state));
 
@@ -53,41 +64,44 @@ class OutputRouter {
   }) async {
     final dlna = DlnaService.instance;
     if (!dlna.isConnected) return;
+    final gen = ++_pushGen;
 
     switch (event) {
       case 'cast-verse':
       case 'cast-slide':
       case 'cast-song':
       case 'update-background':
-        _debounceRender(_stateFor(event, data, currentState), context);
+        _debounceRender(_stateFor(event, data, currentState), context, gen);
         break;
 
       case 'cast-logo':
         await _renderAndPush(
-            _stateFor(event, data, currentState), context);
+            _stateFor(event, data, currentState), context, gen);
         break;
 
       case 'cast-blackout':
-        await _renderBlackout(context);
+        await _renderBlackout(gen);
         break;
 
       case 'cast-welcome':
         await _renderAndPush(
-            _stateFor(event, data, currentState), context);
+            _stateFor(event, data, currentState), context, gen);
         break;
 
       case 'cast-pdf':
         await _renderPdfPage(
             localPath: data['_localPdfPath'] as String?,
             page: (data['currentPage'] as int? ?? 1),
-            context: context);
+            context: context,
+            gen: gen);
         break;
 
       case 'pdf-page':
         await _renderPdfPage(
             localPath: data['_localPdfPath'] as String?,
             page: (data['page'] as int? ?? 1),
-            context: context);
+            context: context,
+            gen: gen);
         break;
 
       case 'cast-pptx':
@@ -186,17 +200,18 @@ class OutputRouter {
 
   // ── Debounced rendering ──
 
-  void _debounceRender(Map<String, dynamic> state, BuildContext context) {
+  void _debounceRender(
+      Map<String, dynamic> state, BuildContext context, int gen) {
     final key = stateKey(state);
     // Instant response: if slide was pre-rendered, serve immediately!
     if (_cache.containsKey(key)) {
       _cancelPending();
-      _renderAndPush(state, context);
+      _renderAndPush(state, context, gen);
       return;
     }
     // Live render: kick off immediately without artificial delay
     _cancelPending();
-    _renderAndPush(state, context);
+    _renderAndPush(state, context, gen);
   }
 
   void _cancelPending() {
@@ -206,7 +221,7 @@ class OutputRouter {
   // ── Render + publish + push ──
 
   Future<void> _renderAndPush(
-      Map<String, dynamic> state, BuildContext context) async {
+      Map<String, dynamic> state, BuildContext context, int gen) async {
     if (!context.mounted) return;
     final key = stateKey(state);
     Uint8List? png = _cache[key];
@@ -221,28 +236,39 @@ class OutputRouter {
       if (png == null) return;
       _store(key, png);
     }
+    // A newer cast superseded this one — drop the push (the cache entry
+    // above stays useful; only the TV push must not be stale).
+    if (gen != _pushGen) return;
     final url = await SlideRenderer.publish(png);
     if (url == null) return;
+    if (gen != _pushGen) return;
     await DlnaService.instance.castImage(url);
   }
 
-  /// Blackout on a DLNA TV: render a solid full-HD black PNG and publish it
-  /// as a still image — the renderer shows black until the next cast or stop.
-  Future<void> _renderBlackout(BuildContext context) async {
+  /// Blackout on a DLNA TV: render a solid full-HD black PNG once and publish
+  /// it as a still image — the renderer shows black until the next cast or
+  /// stop.
+  Future<void> _renderBlackout(int gen) async {
     try {
-      final recorder = ui.PictureRecorder();
-      final canvas = ui.Canvas(recorder);
-      canvas.drawPaint(ui.Paint()..color = const ui.Color(0xFF000000));
-      final picture = recorder.endRecording();
-      final img = await picture.toImage(1920, 1080);
-      final byteData =
-          await img.toByteData(format: ui.ImageByteFormat.png);
-      picture.dispose();
-      img.dispose();
-      final png = byteData?.buffer.asUint8List();
+      Uint8List? png = _blackoutPng;
+      if (png == null) {
+        final recorder = ui.PictureRecorder();
+        final canvas = ui.Canvas(recorder);
+        canvas.drawPaint(ui.Paint()..color = const ui.Color(0xFF000000));
+        final picture = recorder.endRecording();
+        final img = await picture.toImage(1920, 1080);
+        final byteData =
+            await img.toByteData(format: ui.ImageByteFormat.png);
+        picture.dispose();
+        img.dispose();
+        png = byteData?.buffer.asUint8List();
+        if (png != null) _blackoutPng = png;
+      }
       if (png == null) return;
+      if (gen != _pushGen) return;
       final url = await SlideRenderer.publish(png);
       if (url == null) return;
+      if (gen != _pushGen) return;
       await DlnaService.instance.castImage(url, title: 'Blackout');
     } catch (_) {
       // Blackout is best-effort; the phone UI still shows OFF AIR state.
@@ -275,6 +301,7 @@ class OutputRouter {
     required String? localPath,
     required int page,
     required BuildContext context,
+    required int gen,
   }) async {
     Uint8List? png = await _pdfPng(localPath, page);
     if (png == null && localPath != null && localPath.isNotEmpty) {
@@ -285,8 +312,10 @@ class OutputRouter {
       png = await _pdfPng(localPath, page);
     }
     if (png == null) return;
+    if (gen != _pushGen) return;
     final url = await SlideRenderer.publish(png);
     if (url == null) return;
+    if (gen != _pushGen) return;
     await DlnaService.instance.castImage(url, title: 'Page $page');
   }
 
@@ -374,10 +403,15 @@ class OutputRouter {
       final fs = content['fontSize'] ?? 44;
       return 'slide:$title:$text:$fs:$bg';
     } else if (type == 'logo') {
-      return 'logo:$bg';
+      // Include the logo payload (hashed — the base64 URI can be huge) so a
+      // newly uploaded logo invalidates the cached slide instead of serving
+      // the stale one.
+      final imageHash = (content['image'] as String? ?? '').hashCode;
+      return 'logo:$imageHash:$bg';
     } else if (type == 'welcome') {
       final msg = content['message'] ?? '';
-      return 'welcome:$msg:$bg';
+      final logoHash = (content['logo'] as String? ?? '').hashCode;
+      return 'welcome:$msg:$logoHash:$bg';
     }
     return jsonEncode(state);
   }
