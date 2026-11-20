@@ -43,6 +43,22 @@ class _SongsHubScreenState extends State<SongsHubScreen> {
   String _lang = 'All';
   static const _langs = ['All', 'English', 'Hindi', 'Others'];
 
+  @override
+  void initState() {
+    super.initState();
+    widget.searchCtrl.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.searchCtrl.removeListener(_onSearchChanged);
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    if (mounted) setState(() {});
+  }
+
   /// Rotating gradient palette for the song icon squircles.
   static const _palettes = [
     [Color(0xFF0284C7), Color(0xFF00D2FF)],
@@ -54,17 +70,41 @@ class _SongsHubScreenState extends State<SongsHubScreen> {
   ];
 
   String _songLanguage(Map<String, dynamic> song) {
+    if (song['language'] is String && (song['language'] as String).isNotEmpty) {
+      return song['language'] as String;
+    }
     final stanzas = song['stanzas'] as List? ?? [];
     final sample =
         '${song['title'] ?? ''} ${stanzas.join(' ')}';
     if (RegExp(r'[\u0900-\u097F]').hasMatch(sample)) return 'Hindi';
+    final lower = sample.toLowerCase();
+    if (RegExp(r'\b(yahova|prabhu|masih|khuda|aradhana|stuti|dhanyawad|shukriya|jeevan|rooh|aasmaan|paak|kripa|pyar)\b')
+        .hasMatch(lower)) {
+      return 'Hindi';
+    }
     if (RegExp(r'[A-Za-z]').hasMatch(sample)) return 'English';
     return 'Others';
   }
 
-  List<Map<String, dynamic>> get _filtered => widget.allSongs
-      .where((s) => _lang == 'All' || _songLanguage(s) == _lang)
-      .toList();
+  List<Map<String, dynamic>> get _filtered {
+    final query = widget.searchCtrl.text.trim().toLowerCase();
+    final words =
+        query.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+
+    return widget.allSongs.where((s) {
+      // 1. Language tab filter
+      if (_lang != 'All' && _songLanguage(s) != _lang) return false;
+
+      // 2. Search query filter
+      if (words.isEmpty) return true;
+      final title = (s['title'] as String? ?? '').toLowerCase();
+      if (title.contains(query)) return true;
+
+      final stanzas = s['stanzas'] as List? ?? [];
+      final fullText = '$title ${stanzas.join(' ')}'.toLowerCase();
+      return words.every((w) => fullText.contains(w));
+    }).toList();
+  }
 
   Map<String, dynamic>? get _selectedSong =>
       widget.selectedSongIndex >= 0 &&
@@ -128,7 +168,10 @@ class _SongsHubScreenState extends State<SongsHubScreen> {
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
             child: TextField(
               controller: widget.searchCtrl,
-              onChanged: widget.onFilterSongs,
+              onChanged: (text) {
+                widget.onFilterSongs(text);
+                setState(() {});
+              },
               style: const TextStyle(
                   color: AppColors.textHigh, fontSize: 13.5),
               decoration: InputDecoration(
@@ -137,6 +180,17 @@ class _SongsHubScreenState extends State<SongsHubScreen> {
                     const TextStyle(color: AppColors.textMuted, fontSize: 13),
                 prefixIcon: const Icon(Icons.search_rounded,
                     color: AppColors.textMuted, size: 20),
+                suffixIcon: widget.searchCtrl.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.close_rounded,
+                            color: AppColors.textMuted, size: 18),
+                        onPressed: () {
+                          widget.searchCtrl.clear();
+                          widget.onFilterSongs('');
+                          setState(() {});
+                        },
+                      )
+                    : null,
                 filled: true,
                 fillColor: AppColors.surface.withOpacity(0.6),
                 contentPadding: const EdgeInsets.symmetric(vertical: 10),
@@ -155,7 +209,16 @@ class _SongsHubScreenState extends State<SongsHubScreen> {
           ),
           Expanded(
             child: widget.songsLoaded && songs.isEmpty
-                ? _EmptySongs(onImport: widget.onImportWord)
+                ? (widget.searchCtrl.text.trim().isNotEmpty
+                    ? _NoSearchResults(
+                        query: widget.searchCtrl.text.trim(),
+                        onClear: () {
+                          widget.searchCtrl.clear();
+                          widget.onFilterSongs('');
+                          setState(() {});
+                        },
+                      )
+                    : _EmptySongs(onImport: widget.onImportWord))
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     itemCount: songs.length,
@@ -172,7 +235,10 @@ class _SongsHubScreenState extends State<SongsHubScreen> {
                             '${_songLanguage(song)} • ${stanzas.length} stanzas',
                         palette: palette,
                         active: active,
-                        onPlay: () => widget.onPlaySong(abs),
+                        onPlay: () {
+                          widget.onSelectSong(abs);
+                          widget.onPlaySong(abs);
+                        },
                         onSelect: () => widget.onSelectSong(abs),
                         onMore: () => _songMenu(ctx, abs),
                       );
@@ -469,6 +535,45 @@ class _EmptySongs extends StatelessWidget {
           label: const Text('Import Word file'),
         ),
       ]),
+    );
+  }
+}
+
+class _NoSearchResults extends StatelessWidget {
+  final String query;
+  final VoidCallback onClear;
+  const _NoSearchResults({required this.query, required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Icon(Icons.search_off_rounded,
+              size: 44, color: AppColors.textMuted),
+          const SizedBox(height: 12),
+          Text('No songs matching "$query"',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: AppColors.textHigh,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          const Text('Try checking for spelling errors or search by keyword',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+          const SizedBox(height: 16),
+          TextButton.icon(
+            onPressed: onClear,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.cyan,
+            ),
+            icon: const Icon(Icons.close_rounded, size: 16),
+            label: const Text('Clear search'),
+          ),
+        ]),
+      ),
     );
   }
 }

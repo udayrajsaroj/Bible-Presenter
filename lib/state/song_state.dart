@@ -63,10 +63,47 @@ class SongState extends ChangeNotifier {
   }
 
   set selectedSongIndex(int index) {
-    if (_selectedSongIndex != index) {
-      _selectedSongIndex = index.clamp(-1, _filteredSongs.length - 1);
+    if (index < 0) {
+      if (_selectedSongIndex != -1) {
+        _selectedSongIndex = -1;
+        _selectedStanzaIndex = 0;
+        notifyListeners();
+      }
+      return;
+    }
+    // If index was provided as an absolute index into _allSongs, map it to _filteredSongs.
+    int target = index;
+    if (index >= _filteredSongs.length && index < _allSongs.length) {
+      final song = _allSongs[index];
+      final mapped = _filteredSongs.indexOf(song);
+      if (mapped >= 0) {
+        target = mapped;
+      } else {
+        // If song is currently filtered out, clear query so it is available
+        _songSearchQuery = '';
+        _songSearchController.text = '';
+        _filterSongs();
+        target = _filteredSongs.indexOf(song);
+      }
+    }
+    final clamped = target.clamp(-1, _filteredSongs.length - 1);
+    if (_selectedSongIndex != clamped) {
+      _selectedSongIndex = clamped;
       _selectedStanzaIndex = 0; // Reset stanza when song changes
       notifyListeners();
+    }
+  }
+
+  void selectSong(Map<String, dynamic> song) {
+    var idx = _filteredSongs.indexOf(song);
+    if (idx < 0) {
+      _songSearchQuery = '';
+      _songSearchController.text = '';
+      _filterSongs();
+      idx = _filteredSongs.indexOf(song);
+    }
+    if (idx >= 0) {
+      selectedSongIndex = idx;
     }
   }
 
@@ -121,13 +158,16 @@ class SongState extends ChangeNotifier {
     if (_songSearchQuery.isEmpty) {
       _filteredSongs = List.from(_allSongs);
     } else {
+      final words = _songSearchQuery
+          .split(RegExp(r'\s+'))
+          .where((w) => w.isNotEmpty)
+          .toList();
       _filteredSongs = _allSongs.where((song) {
         final title = (song['title'] as String? ?? '').toLowerCase();
         if (title.contains(_songSearchQuery)) return true;
         final stanzas = song['stanzas'] as List<String>? ?? [];
-        for (final stanza in stanzas) {
-          if (stanza.toLowerCase().contains(_songSearchQuery)) return true;
-        }
+        final fullText = '$title ${stanzas.join(' ')}'.toLowerCase();
+        if (words.every((w) => fullText.contains(w))) return true;
         return false;
       }).toList();
     }

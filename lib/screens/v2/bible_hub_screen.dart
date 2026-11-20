@@ -131,33 +131,101 @@ class BibleHubScreen extends StatelessWidget {
     showModalBottomSheet<void>(
       context: ctx,
       backgroundColor: AppColors.surfaceSolid,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => SafeArea(
-        child: SizedBox(
-          height: 480,
-          child: Column(children: [
-            const Padding(
-              padding: EdgeInsets.all(14),
-              child: Text('SELECT BOOK',
-                  style: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.4)),
-            ),
-            Expanded(
-              child: ListView(children: [
-                _groupLabel('OLD TESTAMENT'),
-                for (final b in ot)
-                  _bookTile(ctx, bible, b, books),
-                if (nt.isNotEmpty) _groupLabel('NEW TESTAMENT'),
-                for (final b in nt) _bookTile(ctx, bible, b, books),
-              ]),
-            ),
-          ]),
-        ),
-      ),
+      builder: (_) {
+        String filter = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final otFiltered = filter.isEmpty
+                ? ot
+                : ot.where((b) => b.toLowerCase().contains(filter)).toList();
+            final ntFiltered = filter.isEmpty
+                ? nt
+                : nt.where((b) => b.toLowerCase().contains(filter)).toList();
+
+            return SafeArea(
+              child: SizedBox(
+                height: 520,
+                child: Column(children: [
+                  Center(
+                    child: Container(
+                      width: 38,
+                      height: 4,
+                      margin: const EdgeInsets.only(top: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: TextField(
+                      autofocus: false,
+                      onChanged: (q) =>
+                          setModalState(() => filter = q.trim().toLowerCase()),
+                      style: const TextStyle(
+                          color: AppColors.textHigh, fontSize: 13.5),
+                      decoration: InputDecoration(
+                        hintText: 'Search 66 books…',
+                        hintStyle: const TextStyle(
+                            color: AppColors.textMuted, fontSize: 13),
+                        prefixIcon: const Icon(Icons.search_rounded,
+                            color: AppColors.textMuted, size: 20),
+                        suffixIcon: filter.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.close_rounded,
+                                    color: AppColors.textMuted, size: 18),
+                                onPressed: () =>
+                                    setModalState(() => filter = ''),
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: AppColors.surface.withOpacity(0.6),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                        border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppRadii.button),
+                          borderSide:
+                              const BorderSide(color: AppColors.borderWhite),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppRadii.button),
+                          borderSide:
+                              const BorderSide(color: AppColors.borderWhite),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: otFiltered.isEmpty && ntFiltered.isEmpty
+                        ? const Center(
+                            child: Text('No books matching query',
+                                style: TextStyle(
+                                    color: AppColors.textMuted, fontSize: 13)),
+                          )
+                        : ListView(children: [
+                            if (otFiltered.isNotEmpty) ...[
+                              _groupLabel('OLD TESTAMENT'),
+                              for (final b in otFiltered)
+                                _bookTile(ctx, bible, b, books),
+                            ],
+                            if (ntFiltered.isNotEmpty) ...[
+                              _groupLabel('NEW TESTAMENT'),
+                              for (final b in ntFiltered)
+                                _bookTile(ctx, bible, b, books),
+                            ],
+                          ]),
+                  ),
+                ]),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
