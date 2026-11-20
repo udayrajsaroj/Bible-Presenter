@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../state/bible_state.dart';
 import '../theme.dart';
 import '../widgets/presenter_shell.dart';
+import '../widgets/v2/bible_language_sheet.dart';
 
 /// Dedicated live-casting screen for scripture. The selection (book /
 /// chapter / verse) lives in BibleState — this screen listens to it, so the
@@ -145,6 +146,15 @@ class _BiblePresenterScreenState extends State<BiblePresenterScreen> {
           subtitle: '${verses.length} verses in chapter',
           tvState: widget.tvState,
           headerActions: [
+            PresenterIconButton(
+              icon: Icons.translate_rounded,
+              tooltip: 'Language & Dual Presenting',
+              onTap: () => showBibleLanguageSheet(
+                context: context,
+                bible: b,
+                onChanged: widget.onCastVerse,
+              ),
+            ),
             // Font size popover — re-casts so the TV follows immediately.
             PopupMenuButton<int>(
               tooltip: 'Font size',

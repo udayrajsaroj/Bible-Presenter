@@ -83,6 +83,7 @@ class BibleState extends ChangeNotifier {
   Map<String, String> get languages => _languages;
   String get primaryLang => _primaryLang;
   String get secondaryLang => _secondaryLang;
+  bool get isDualLanguage => _secondaryLang.isNotEmpty;
 
   // Bible data access
   Map<int, Map<int, Map<String, String>>>? get selectedBookChapters =>
@@ -133,8 +134,12 @@ class BibleState extends ChangeNotifier {
 
   set primaryLang(String code) {
     if (!_languages.containsKey(code) || code == _primaryLang) return;
+    final oldPrimary = _primaryLang;
     _primaryLang = code;
-    if (_secondaryLang == code) _secondaryLang = '';
+    // If switching primary to the current secondary, swap so dual mode stays active!
+    if (_secondaryLang == code) {
+      _secondaryLang = oldPrimary;
+    }
     _persistSelection();
     _rebuild();
     notifyListeners();
@@ -145,6 +150,39 @@ class BibleState extends ChangeNotifier {
     if (code == _secondaryLang) return;
     if (code == _primaryLang) return; // can't use the same language twice
     _secondaryLang = code;
+    _persistSelection();
+    _rebuild();
+    notifyListeners();
+  }
+
+  void toggleDualLanguage(bool enable) {
+    if (enable) {
+      if (_secondaryLang.isEmpty) {
+        final other = _languages.keys.firstWhere(
+          (k) => k != _primaryLang,
+          orElse: () => '',
+        );
+        _secondaryLang = other;
+      }
+    } else {
+      _secondaryLang = '';
+    }
+    _persistSelection();
+    _rebuild();
+    notifyListeners();
+  }
+
+  void setDualPreset({required String primary, required String secondary}) {
+    if (_languages.containsKey(primary)) {
+      _primaryLang = primary;
+    }
+    if (secondary.isNotEmpty &&
+        _languages.containsKey(secondary) &&
+        secondary != _primaryLang) {
+      _secondaryLang = secondary;
+    } else {
+      _secondaryLang = '';
+    }
     _persistSelection();
     _rebuild();
     notifyListeners();

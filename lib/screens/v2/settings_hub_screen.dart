@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../state/bible_state.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/v2/bible_language_sheet.dart';
 
 /// Screen 6 — Settings & profile. Everything here is functional:
 ///  • Connection tile: live server / TV status, copy URL, cast dialog.
@@ -368,131 +369,10 @@ class SettingsHubScreen extends StatelessWidget {
   // ══════════════════ LANGUAGE: primary / secondary switcher ═════════════
 
   void _openLanguageSheet(BuildContext ctx) {
-    showModalBottomSheet<void>(
+    final bible = Provider.of<BibleState>(ctx, listen: false);
+    showBibleLanguageSheet(
       context: ctx,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surfaceSolid,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (sheetCtx) => Consumer<BibleState>(
-        builder: (context, bible, _) {
-          final langs = bible.languages.entries.toList();
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Row(children: [
-                const Icon(Icons.translate_rounded,
-                    size: 20, color: AppColors.purple),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text('Bible Languages',
-                      style: TextStyle(
-                          color: AppColors.textHigh,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold)),
-                ),
-                Text('${langs.length} installed',
-                    style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 12)),
-              ]),
-              const SizedBox(height: 10),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text('PRIMARY — big on TV',
-                    style: TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2)),
-              ),
-              const SizedBox(height: 4),
-              ...langs.map((e) => _langRow(
-                    context,
-                    name: e.value,
-                    selected: bible.primaryLang == e.key,
-                    color: AppColors.cyan,
-                    onTap: () => bible.primaryLang = e.key,
-                  )),
-              const SizedBox(height: 12),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text('SECONDARY — small under primary',
-                    style: TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2)),
-              ),
-              const SizedBox(height: 4),
-              _langRow(
-                context,
-                name: 'None (single language)',
-                selected: bible.secondaryLang.isEmpty,
-                color: AppColors.purple,
-                onTap: () => bible.secondaryLang = '',
-              ),
-              ...langs.map((e) => e.key == bible.primaryLang
-                  ? const SizedBox.shrink()
-                  : _langRow(
-                      context,
-                      name: e.value,
-                      selected: bible.secondaryLang == e.key,
-                      color: AppColors.purple,
-                      onTap: () => bible.secondaryLang = e.key,
-                    )),
-              const SizedBox(height: 10),
-              const Text(
-                  'Import more languages from the Bible hub (VerseVIEW XML).',
-                  style:
-                      TextStyle(color: AppColors.textMuted, fontSize: 11.5)),
-            ]),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _langRow(
-    BuildContext ctx, {
-    required String name,
-    required bool selected,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: selected ? color.withOpacity(0.12) : Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: selected ? color.withOpacity(0.55) : Colors.transparent),
-          ),
-          child: Row(children: [
-            Icon(
-                selected
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_off_rounded,
-                size: 18,
-                color: selected ? color : AppColors.textMuted),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(name,
-                  style: TextStyle(
-                      color:
-                          selected ? AppColors.textHigh : AppColors.textMuted,
-                      fontSize: 13.5,
-                      fontWeight:
-                          selected ? FontWeight.bold : FontWeight.normal)),
-            ),
-          ]),
-        ),
-      ),
+      bible: bible,
     );
   }
 

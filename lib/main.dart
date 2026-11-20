@@ -3378,62 +3378,65 @@ class _ControllerPageState extends State<ControllerPage>
     // ── Redesigned shell: bottom navigation + 4 root tabs (v7) ──
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: IndexedStack(index: _navIndex, children: [
-        // Tab 0 · Home dashboard
-        HomeScreen(
-          tvState: tvStateN,
-          onOpenSlides: _openSlidesHub,
-          onOpenSongs: _openSongsHub,
-          onOpenBible: () => setState(() => _navIndex = 1),
-          onOpenFiles: () => setState(() => _navIndex = 2),
-          onOpenSettings: () => setState(() => _navIndex = 3),
-          onCastLogo: _castLogo,
-          onCastBlackout: _castBlackout,
-          onCastToTV: _showCastDialog,
-        ),
-        // Tab 1 · Preview (Bible)
-        BibleHubScreen(
-          onPrevVerse: _prevVerse,
-          onNextVerse: _nextVerse,
-          onCastVerse: _openBiblePresenter,
-          onImportLanguage: _importBibleLanguage,
-        ),
-        // Tab 2 · Library (Files)
-        FilesHubScreen(
-          uploadedFiles: _uploadedFiles,
-          isUploading: _isUploading,
-          activeFileIndex: _activeFileIndex,
-          ytUrlCtrl: _ytUrlCtrl,
-          onPickAndUploadFile: _pickAndUploadFile,
-          onCastFile: _castFileAndPresent,
-          onDeleteFile: _deleteUploadedFile,
-          onCastYouTubeUrl: _castYouTubeUrl,
-          onBack: () => setState(() => _navIndex = 0),
-        ),
-        // Tab 3 · More (Settings)
-        SettingsHubScreen(
-          serverStarted: _serverStarted,
-          connected:
-              _connected || _dlna.isConnected || _castService.isConnected,
-          deviceIp: _deviceIp,
-          storedTvName: _reconnectName,
-          onReconnectTv: _reconnectFromBanner,
-          onForgetTv: _forgetStoredTv,
-          welcomeMsgCtrl: _welcomeMsgCtrl,
-          onWelcomeMessageChanged: (val) async {
-            setState(() => _welcomeMessage = val);
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('welcome_message', val);
-          },
-          customLogoPath: _customLogoPath,
-          onUploadLogo: _uploadCustomLogo,
-          onRemoveLogo: _removeCustomLogo,
-          onCopyUrl: _copyUrl,
-          onCastToTV: _showCastDialog,
-          onClassicUI: _openClassicInterface,
-          onBack: () => setState(() => _navIndex = 0),
-        ),
-      ]),
+      body: SafeArea(
+        bottom: false,
+        child: IndexedStack(index: _navIndex, children: [
+          // Tab 0 · Home dashboard
+          HomeScreen(
+            tvState: tvStateN,
+            onOpenSlides: _openSlidesHub,
+            onOpenSongs: _openSongsHub,
+            onOpenBible: () => setState(() => _navIndex = 1),
+            onOpenFiles: () => setState(() => _navIndex = 2),
+            onOpenSettings: () => setState(() => _navIndex = 3),
+            onCastLogo: _castLogo,
+            onCastBlackout: _castBlackout,
+            onCastToTV: _showCastDialog,
+          ),
+          // Tab 1 · Preview (Bible)
+          BibleHubScreen(
+            onPrevVerse: _prevVerse,
+            onNextVerse: _nextVerse,
+            onCastVerse: _openBiblePresenter,
+            onImportLanguage: _importBibleLanguage,
+          ),
+          // Tab 2 · Library (Files)
+          FilesHubScreen(
+            uploadedFiles: _uploadedFiles,
+            isUploading: _isUploading,
+            activeFileIndex: _activeFileIndex,
+            ytUrlCtrl: _ytUrlCtrl,
+            onPickAndUploadFile: _pickAndUploadFile,
+            onCastFile: _castFileAndPresent,
+            onDeleteFile: _deleteUploadedFile,
+            onCastYouTubeUrl: _castYouTubeUrl,
+            onBack: () => setState(() => _navIndex = 0),
+          ),
+          // Tab 3 · More (Settings)
+          SettingsHubScreen(
+            serverStarted: _serverStarted,
+            connected:
+                _connected || _dlna.isConnected || _castService.isConnected,
+            deviceIp: _deviceIp,
+            storedTvName: _reconnectName,
+            onReconnectTv: _reconnectFromBanner,
+            onForgetTv: _forgetStoredTv,
+            welcomeMsgCtrl: _welcomeMsgCtrl,
+            onWelcomeMessageChanged: (val) async {
+              setState(() => _welcomeMessage = val);
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('welcome_message', val);
+            },
+            customLogoPath: _customLogoPath,
+            onUploadLogo: _uploadCustomLogo,
+            onRemoveLogo: _removeCustomLogo,
+            onCopyUrl: _copyUrl,
+            onCastToTV: _showCastDialog,
+            onClassicUI: _openClassicInterface,
+            onBack: () => setState(() => _navIndex = 0),
+          ),
+        ]),
+      ),
       bottomNavigationBar: AppBottomNav(
         currentIndex: _navIndex,
         onTap: (i) => setState(() => _navIndex = i),

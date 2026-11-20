@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../state/bible_state.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/v2/bible_language_sheet.dart';
 
 /// Screen 4 — Bible / Scripture presenter hub (bottom-nav "Preview" tab):
 /// language + book selector pills, the interactive scripture hero card with
@@ -28,131 +29,94 @@ class BibleHubScreen extends StatelessWidget {
       final ref =
           '${bible.selectedBook} ${bible.selectedChapter}:${bible.selectedVerse}';
 
-      return SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // ── Top bar ──
-          Row(children: [
-            const Icon(Icons.menu_book_rounded,
-                size: 24, color: AppColors.cyan),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text('Bible',
-                  style: TextStyle(
-                      color: AppColors.textHigh,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold)),
-            ),
-            IconButton(
-              tooltip: 'Jump to book',
-              onPressed: () => _pickBook(context, bible),
-              icon: const Icon(Icons.search, color: AppColors.textMuted),
-            ),
-            IconButton(
-              tooltip: 'Import language',
-              onPressed: onImportLanguage,
-              icon: const Icon(Icons.tune, color: AppColors.textMuted),
-            ),
-          ]),
-
-          // ── Dual selector pills ──
-          Row(children: [
-            Expanded(
-              child: _SelectorPill(
-                label: _langName(bible),
-                onTap: () => _pickLanguage(context, bible),
+      return SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // ── Top bar ──
+            Row(children: [
+              const Icon(Icons.menu_book_rounded,
+                  size: 24, color: AppColors.cyan),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text('Bible',
+                    style: TextStyle(
+                        color: AppColors.textHigh,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold)),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _SelectorPill(
-                label: bible.bibleLoaded
-                    ? bible.selectedBook
-                    : 'Loading…',
-                onTap: () => _pickBook(context, bible),
+              IconButton(
+                tooltip: 'Jump to book',
+                onPressed: () => _pickBook(context, bible),
+                icon: const Icon(Icons.search, color: AppColors.textMuted),
               ),
+              IconButton(
+                tooltip: 'Language & Dual Presenting',
+                onPressed: () => _pickLanguage(context, bible),
+                icon: const Icon(Icons.tune, color: AppColors.textMuted),
+              ),
+            ]),
+
+            // ── Dual selector pills ──
+            Row(children: [
+              Expanded(
+                child: _SelectorPill(
+                  label: _langName(bible),
+                  onTap: () => _pickLanguage(context, bible),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _SelectorPill(
+                  label: bible.bibleLoaded
+                      ? bible.selectedBook
+                      : 'Loading…',
+                  onTap: () => _pickBook(context, bible),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 16),
+
+            // ── Interactive scripture hero card ──
+            _ScriptureCard(
+              ref: ref,
+              primary: verseData['primary'] ?? '',
+              secondary: verseData['secondary'] ?? '',
+              loaded: bible.bibleLoaded,
+              onPrev: onPrevVerse,
+              onNext: onNextVerse,
             ),
+            const SizedBox(height: 14),
+
+            // ── Font size & brightness slider ──
+            _FontSlider(fontSize: bible.fontSize),
+            const SizedBox(height: 16),
+
+            // ── Cast action ──
+            _CastButton(onTap: onCastVerse),
           ]),
-          const SizedBox(height: 16),
-
-          // ── Interactive scripture hero card ──
-          _ScriptureCard(
-            ref: ref,
-            primary: verseData['primary'] ?? '',
-            secondary: verseData['secondary'] ?? '',
-            loaded: bible.bibleLoaded,
-            onPrev: onPrevVerse,
-            onNext: onNextVerse,
-          ),
-          const SizedBox(height: 14),
-
-          // ── Font size & brightness slider ──
-          _FontSlider(fontSize: bible.fontSize),
-          const SizedBox(height: 16),
-
-          // ── Cast action ──
-          _CastButton(onTap: onCastVerse),
-        ]),
+        ),
       );
     });
   }
 
-  String _langName(BibleState bible) =>
-      bible.languages[bible.primaryLang] ?? 'Language';
+  String _langName(BibleState bible) {
+    final p = bible.languages[bible.primaryLang] ?? 'Language';
+    if (bible.secondaryLang.isNotEmpty) {
+      final s = bible.languages[bible.secondaryLang] ?? bible.secondaryLang;
+      return '$p + $s (Dual)';
+    }
+    return p;
+  }
 
   // ── Pickers ────────────────────────────────────────────────────────────
 
   void _pickLanguage(BuildContext ctx, BibleState bible) {
-    showModalBottomSheet<void>(
+    showBibleLanguageSheet(
       context: ctx,
-      backgroundColor: AppColors.surfaceSolid,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment:
-            CrossAxisAlignment.start, children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(18, 14, 18, 6),
-            child: Text('LANGUAGE',
-                style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.4)),
-          ),
-          for (final entry in bible.languages.entries)
-            ListTile(
-              leading: Icon(
-                  entry.key == bible.primaryLang
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_off_rounded,
-                  color: AppColors.cyan,
-                  size: 20),
-              title: Text(entry.value,
-                  style: const TextStyle(
-                      color: AppColors.textHigh, fontSize: 14)),
-              onTap: () {
-                Navigator.pop(ctx);
-                bible.primaryLang = entry.key;
-              },
-            ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.download_rounded,
-                color: AppColors.purple, size: 20),
-            title: const Text('Import bible language…',
-                style: TextStyle(
-                    color: AppColors.textHigh,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600)),
-            onTap: () {
-              Navigator.pop(ctx);
-              onImportLanguage();
-            },
-          ),
-          const SizedBox(height: 8),
-        ]),
-      ),
+      bible: bible,
+      onImportLanguage: onImportLanguage,
     );
   }
 

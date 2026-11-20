@@ -35,27 +35,30 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(18, 10, 18, 24),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _Header(
-          tvState: tvState,
-          onSettings: onOpenSettings,
-          onCastLogo: onCastLogo,
-          onCastBlackout: onCastBlackout,
-        ),
-        const SizedBox(height: 14),
-        const _HeroVerseCard(),
-        const SizedBox(height: 18),
-        _FeatureGrid(
-          onSlides: onOpenSlides,
-          onSongs: onOpenSongs,
-          onBible: onOpenBible,
-          onFiles: onOpenFiles,
-        ),
-        const SizedBox(height: 18),
-        _CastBanner(onTap: onCastToTV),
-      ]),
+    return SafeArea(
+      bottom: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _Header(
+            tvState: tvState,
+            onSettings: onOpenSettings,
+            onCastLogo: onCastLogo,
+            onCastBlackout: onCastBlackout,
+          ),
+          const SizedBox(height: 14),
+          const _HeroVerseCard(),
+          const SizedBox(height: 18),
+          _FeatureGrid(
+            onSlides: onOpenSlides,
+            onSongs: onOpenSongs,
+            onBible: onOpenBible,
+            onFiles: onOpenFiles,
+          ),
+          const SizedBox(height: 18),
+          _CastBanner(onTap: onCastToTV),
+        ]),
+      ),
     );
   }
 }
@@ -81,7 +84,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 60,
+      height: 54,
       decoration: const BoxDecoration(
         border: Border(
           bottom: BorderSide(color: AppColors.borderGlow, width: 1),
@@ -89,7 +92,7 @@ class _Header extends StatelessWidget {
       ),
       child: Row(children: [
         const _BrandMark(),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
         const Expanded(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -100,43 +103,76 @@ class _Header extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                       color: AppColors.textHigh,
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 0.3)),
-              SizedBox(height: 2),
+                      letterSpacing: 0.2)),
+              SizedBox(height: 1),
               Text('Present • Worship • Share',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                       color: AppColors.textMuted,
-                      fontSize: 10.5,
-                      height: 1.3,
-                      letterSpacing: 0.8)),
+                      fontSize: 9.5,
+                      height: 1.2,
+                      letterSpacing: 0.5)),
             ],
           ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 4),
         LivePill(tvState: tvState),
-        // Quick presentation actions — same trio the presenter headers carry.
-        PresenterIconButton(
+        const SizedBox(width: 2),
+        _HeaderAction(
           icon: Icons.church,
           color: AppColors.gold,
           tooltip: 'Cast Logo',
           onTap: onCastLogo,
         ),
-        PresenterIconButton(
+        _HeaderAction(
           icon: Icons.dark_mode,
           color: Colors.red.shade400,
           tooltip: 'Blackout',
           onTap: onCastBlackout,
         ),
-        PresenterIconButton(
+        _HeaderAction(
           icon: Icons.settings_outlined,
           color: AppColors.textMuted,
           tooltip: 'Settings',
           onTap: onSettings,
         ),
       ]),
+    );
+  }
+}
+
+class _HeaderAction extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _HeaderAction({
+    required this.icon,
+    required this.color,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            width: 32,
+            height: 38,
+            child: Icon(icon, size: 18, color: color),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -149,21 +185,21 @@ class _BrandMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 40,
-      height: 40,
+      width: 34,
+      height: 34,
       decoration: BoxDecoration(
         color: Colors.amber.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.amber.withOpacity(0.35)),
         boxShadow: [
           BoxShadow(
               color: Colors.amber.withOpacity(0.22),
-              blurRadius: 14,
+              blurRadius: 10,
               spreadRadius: 1),
         ],
       ),
       child: const Icon(Icons.menu_book_rounded,
-          size: 22, color: Color(0xFFF5C842)),
+          size: 19, color: Color(0xFFF5C842)),
     );
   }
 }
