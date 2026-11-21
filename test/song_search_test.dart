@@ -65,7 +65,6 @@ void main() {
 
       final searchCtrl = TextEditingController();
       int selectedIdx = -1;
-      int playedIdx = -1;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -80,7 +79,7 @@ void main() {
                 onImportWord: () {},
                 onFilterSongs: (_) {},
                 onSelectSong: (i) => setState(() => selectedIdx = i),
-                onPlaySong: (i) => setState(() => playedIdx = i),
+                onPlaySong: (_) {},
                 onEditSong: (_) {},
                 onDeleteSong: (_) {},
                 onBack: () {},

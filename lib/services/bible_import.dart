@@ -54,8 +54,15 @@ const Map<String, String> _kBookAliases = {
   'song of songs': 'Song of Solomon',
 };
 
-String _canonicalBook(String name) =>
-    _kBookAliases[name.toLowerCase()] ?? name;
+String _canonicalBook(String name) {
+  final lower = name.trim().toLowerCase();
+  final alias = _kBookAliases[lower];
+  if (alias != null) return alias;
+  for (final cb in _kCanonicalBooks) {
+    if (cb.toLowerCase() == lower) return cb;
+  }
+  return name.trim();
+}
 
 class ImportedBible {
   /// ASCII slug used as the storage key (e.g. `malayalam`).
@@ -135,39 +142,70 @@ class BibleImport {
 
     for (final event in parseEvents(xml)) {
       if (event is XmlStartElementEvent) {
-        switch (event.name) {
+        final tag = event.name.toUpperCase();
+        switch (tag) {
           case 'XMLBIBLE':
+          case 'BIBLE':
             bibleName = event.attributes
-                .firstWhereOrNull((a) => a.name == 'biblename')
+                .firstWhereOrNull((a) {
+                  final k = a.name.toLowerCase();
+                  return k == 'biblename' ||
+                      k == 'translation' ||
+                      k == 'name' ||
+                      k == 'title';
+                })
                 ?.value;
             break;
           case 'BIBLEBOOK':
+          case 'BOOK':
             final bname = event.attributes
-                .firstWhereOrNull((a) => a.name == 'bname')
+                .firstWhereOrNull((a) {
+                  final k = a.name.toLowerCase();
+                  return k == 'bname' || k == 'name' || k == 'b_name';
+                })
                 ?.value;
             final bnumber = int.tryParse(event.attributes
-                .firstWhereOrNull((a) => a.name == 'bnumber')
+                .firstWhereOrNull((a) {
+                  final k = a.name.toLowerCase();
+                  return k == 'bnumber' || k == 'number' || k == 'b_number';
+                })
                 ?.value ?? '');
+
+            String? resolvedBook;
             if (bname != null && bname.trim().isNotEmpty) {
-              book = _canonicalBook(bname.trim());
-            } else if (bnumber != null &&
+              final canonical = _canonicalBook(bname.trim());
+              if (_kCanonicalBooks.contains(canonical)) {
+                resolvedBook = canonical;
+              }
+            }
+            if (resolvedBook == null &&
+                bnumber != null &&
                 bnumber >= 1 &&
                 bnumber <= _kCanonicalBooks.length) {
-              book = _kCanonicalBooks[bnumber - 1];
-            } else {
-              book = null; // unidentifiable book — skip its content
+              resolvedBook = _kCanonicalBooks[bnumber - 1];
             }
+            book = resolvedBook ??
+                (bname != null && bname.trim().isNotEmpty
+                    ? _canonicalBook(bname.trim())
+                    : null);
             break;
           case 'CHAPTER':
             chapter = int.tryParse(event.attributes
-                .firstWhereOrNull((a) => a.name == 'cnumber')
+                .firstWhereOrNull((a) {
+                  final k = a.name.toLowerCase();
+                  return k == 'cnumber' || k == 'number' || k == 'c_number';
+                })
                 ?.value ?? '');
             break;
           case 'VERS':
+          case 'VERSE':
             inVerse = true;
             ignoreDepth = 0;
             vnumber = int.tryParse(event.attributes
-                .firstWhereOrNull((a) => a.name == 'vnumber')
+                .firstWhereOrNull((a) {
+                  final k = a.name.toLowerCase();
+                  return k == 'vnumber' || k == 'number' || k == 'v_number';
+                })
                 ?.value ?? '') ?? 0;
             verseText.clear();
             break;
@@ -181,8 +219,10 @@ class BibleImport {
       } else if (event is XmlCDATAEvent) {
         if (inVerse && ignoreDepth == 0) verseText.write(event.text);
       } else if (event is XmlEndElementEvent) {
-        switch (event.name) {
+        final tag = event.name.toUpperCase();
+        switch (tag) {
           case 'VERS':
+          case 'VERSE':
             storeVerse();
             break;
           case 'NOTE':

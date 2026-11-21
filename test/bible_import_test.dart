@@ -56,6 +56,34 @@ void main() {
       expect(b.data['Psalms']['119']['105'], 'Thy word is a lamp');
     });
 
+    test('parses Beblia / Holy-Bible-XML lowercase format with number attributes', () {
+      const bebliaXml = '''
+<?xml version="1.0" encoding="UTF-8"?>
+<bible translation="Marathi IRV">
+  <testament name="Old">
+    <book number="1">
+      <chapter number="1">
+        <verse number="1">प्रारंभी देवाने आकाश व पृथ्वी ही निर्माण केली.</verse>
+      </chapter>
+    </book>
+    <book number="19">
+      <chapter number="23">
+        <verse number="1">परमेश्वर माझा मेंढपाळ आहे.</verse>
+      </chapter>
+    </book>
+  </testament>
+</bible>
+''';
+      final b = BibleImport.parseZefaniaXml(bebliaXml);
+      expect(b.name, 'Marathi IRV');
+      expect(b.data.containsKey('Genesis'), isTrue);
+      expect(b.data.containsKey('Psalms'), isTrue);
+      expect(b.data['Genesis']!['1']!['1'],
+          'प्रारंभी देवाने आकाश व पृथ्वी ही निर्माण केली.');
+      expect(b.data['Psalms']!['23']!['1'], 'परमेश्वर माझा मेंढपाळ आहे.');
+      expect(b.verseCount, 2);
+    });
+
     test('throws when no verses found', () {
       expect(
         () => BibleImport.parseZefaniaXml('<XMLBIBLE></XMLBIBLE>'),
