@@ -18,6 +18,8 @@ dependencies:
   media_cast_dlna: ^0.3.1
   # Renders PDF pages to images on the phone for TV Direct document casting
   pdfx: ^2.9.2
+  # Video playback on controller
+  video_player: ^2.9.2
   # Shelf server
   shelf: ^1.4.1
   shelf_router: ^1.1.4

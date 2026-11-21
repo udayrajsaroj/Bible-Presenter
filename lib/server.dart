@@ -244,7 +244,85 @@ Future<void> startServer(dynamic message) async {
     }
   });
 
-  // ── Serve uploaded files ──
+  // ── Serve uploaded files (with full HTTP Range + DLNA streaming support) ──
+  Response handleFileRequest(Request req, String safeName, File file, FileStat stat) {
+    final mime = _contentType(safeName);
+    final isVideo = _fileType(safeName) == 'video';
+    final headers = <String, String>{
+      'Content-Type': mime,
+      'Access-Control-Allow-Origin': '*',
+      'Content-Disposition': 'inline; filename="$safeName"',
+      'Cache-Control': 'no-cache',
+      'Accept-Ranges': 'bytes',
+      if (isVideo) ...{
+        'transferMode.dlna.org': 'Streaming',
+        'contentFeatures.dlna.org':
+            'DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000',
+      },
+    };
+
+    if (req.method == 'HEAD') {
+      return Response.ok(null, headers: {
+        ...headers,
+        'Content-Length': '${stat.size}',
+      });
+    }
+
+    // HTTP Range support: Kodi / DLNA / TV browsers request partial content so
+    // players can seek inside large files without downloading them first.
+    // Streaming via file.openRead prevents high RAM usage and socket starvation.
+    final rangeHeader = req.headers['range'];
+    if (rangeHeader != null) {
+      final match = RegExp(r'bytes=(\d*)-(\d*)').firstMatch(rangeHeader);
+      if (match != null) {
+        final startStr = match.group(1);
+        final endStr = match.group(2);
+        int start =
+            startStr != null && startStr.isNotEmpty ? int.parse(startStr) : 0;
+        int end = endStr != null && endStr.isNotEmpty
+            ? int.parse(endStr)
+            : stat.size - 1;
+        if (start >= stat.size) {
+          return Response(416,
+              body: 'Requested range not satisfiable',
+              headers: {'Content-Range': 'bytes */${stat.size}'});
+        }
+        if (end >= stat.size) end = stat.size - 1;
+        if (startStr == null || startStr.isEmpty) {
+          // Suffix range (bytes=-N): last N bytes.
+          final n = int.parse(endStr!);
+          start = (stat.size - n).clamp(0, stat.size - 1);
+          end = stat.size - 1;
+        }
+        final length = end - start + 1;
+        return Response(206,
+            body: file.openRead(start, end + 1),
+            headers: {
+              ...headers,
+              'Content-Range': 'bytes $start-$end/${stat.size}',
+              'Content-Length': '$length',
+            });
+      }
+    }
+
+    return Response.ok(file.openRead(), headers: {
+      ...headers,
+      'Content-Length': '${stat.size}',
+    });
+  }
+
+  router.add('HEAD', '/uploads/<filename>', (Request req, String filename) async {
+    try {
+      final safeName = filename.replaceAll('..', '').split('/').last;
+      final file = File('$_uploadDir/$safeName');
+      if (!await file.exists()) return Response.notFound('File not found');
+      final stat = await file.stat();
+      return handleFileRequest(req, safeName, file, stat);
+    } catch (e) {
+      return Response.internalServerError(body: 'Error: $e');
+    }
+  });
+
   router.get('/uploads/<filename>', (Request req, String filename) async {
     try {
       // Sanitize: remove path traversal and take basename only
@@ -253,65 +331,8 @@ Future<void> startServer(dynamic message) async {
       if (!await file.exists()) {
         return Response.notFound('File not found');
       }
-      final headers = {
-        'Content-Type': _contentType(safeName),
-        'Access-Control-Allow-Origin': '*',
-        'Content-Disposition': 'inline; filename="$safeName"',
-        'Cache-Control': 'no-cache',
-        'Accept-Ranges': 'bytes',
-      };
-
-      // HTTP Range support: TV browsers request partial content so the
-      // <video> element can seek inside 1 GB files without downloading
-      // them first. Without a 206 response, video-seek remote control
-      // would not work until the whole file is buffered.
       final stat = await file.stat();
-      final rangeHeader = req.headers['range'];
-      if (rangeHeader != null) {
-        final match = RegExp(r'bytes=(\d*)-(\d*)').firstMatch(rangeHeader);
-        if (match != null) {
-          final startStr = match.group(1);
-          final endStr = match.group(2);
-          int start = startStr != null && startStr.isNotEmpty
-              ? int.parse(startStr)
-              : 0;
-          int end = endStr != null && endStr.isNotEmpty
-              ? int.parse(endStr)
-              : stat.size - 1;
-          if (start >= stat.size) {
-            return Response(
-                416,
-                body: 'Requested range not satisfiable',
-                headers: {'Content-Range': 'bytes */${stat.size}'});
-          }
-          if (end >= stat.size) end = stat.size - 1;
-          if (startStr == null || startStr.isEmpty) {
-            // Suffix range (bytes=-N): last N bytes.
-            final n = int.parse(endStr!);
-            start = (stat.size - n).clamp(0, stat.size - 1);
-            end = stat.size - 1;
-          }
-          final length = end - start + 1;
-          final raf = await file.open();
-          try {
-            await raf.setPosition(start);
-            final bytes = await raf.read(length);
-            return Response(206, body: bytes, headers: {
-              ...headers,
-              'Content-Range': 'bytes $start-$end/${stat.size}',
-              'Content-Length': '$length',
-            });
-          } finally {
-            await raf.close();
-          }
-        }
-      }
-
-      final bytes = await file.readAsBytes();
-      return Response.ok(bytes, headers: {
-        ...headers,
-        'Content-Length': '${stat.size}',
-      });
+      return handleFileRequest(req, safeName, file, stat);
     } catch (e) {
       return Response.internalServerError(body: 'Error: $e');
     }

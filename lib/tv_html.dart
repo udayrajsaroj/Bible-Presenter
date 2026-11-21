@@ -969,7 +969,14 @@ const String tvHtmlContent = r'''
         videoId: videoId,
         width: '100%',
         height: '100%',
-        playerVars: { autoplay: 1, playsinline: 1, controls: 0, rel: 0 },
+        playerVars: {
+          autoplay: 1,
+          playsinline: 1,
+          controls: 0,
+          rel: 0,
+          enablejsapi: 1,
+          origin: window.location.origin
+        },
         events: {
           onReady: () => {
             yt.playVideo();

@@ -39,10 +39,12 @@ import 'services/cast_service.dart';
 import 'services/bible_import.dart';
 import 'screens/bible_presenter_screen.dart';
 import 'screens/pdf_presenter_screen.dart';
+import 'screens/video_presenter_screen.dart';
 import 'screens/song_presenter_screen.dart';
 import 'services/song_docx.dart';
 import 'widgets/song_slide_editor.dart';
 import 'services/cast_api.g.dart';
+import 'services/youtube_parser.dart';
 import 'widgets/cast_button.dart';
 import 'state/bible_state.dart';
 import 'state/song_state.dart';
@@ -2355,27 +2357,16 @@ class _ControllerPageState extends State<ControllerPage>
   }
 
   // ══════════════════ YOUTUBE CAST (Feature 3) ══════════════════
-  /// Extracts the eleven-character video ID from the three common YouTube
-  /// link forms: watch?v=, youtu.be/ and shorts/.
-  static String? extractYouTubeId(String url) {
-    final patterns = [
-      RegExp(r'v=([\w-]{11})'), // youtube.com/watch?v=ID
-      RegExp(r'youtu\.be/([\w-]{11})'), // https://youtu.be/ID
-      RegExp(r'shorts/([\w-]{11})'), // youtube.com/shorts/ID
-    ];
-    for (final re in patterns) {
-      final m = re.firstMatch(url);
-      if (m != null) return m.group(1);
-    }
-    return null;
-  }
+  /// Extracts the eleven-character video ID from common YouTube
+  /// link forms: watch?v=, youtu.be/, shorts/, live/, embed/ or bare ID.
+  static String? extractYouTubeId(String url) => YouTubeParser.extractId(url);
 
   void _castYouTubeUrl() {
     final raw = _ytUrlCtrl.text.trim();
     if (raw.isEmpty) return;
     final videoId = extractYouTubeId(raw);
     if (videoId == null) {
-      _showSnack('Paste a youtube.com/watch, youtu.be or shorts link',
+      _showSnack('Paste a youtube.com/watch, youtu.be, shorts or live link',
           error: true);
       return;
     }
@@ -2387,8 +2378,188 @@ class _ControllerPageState extends State<ControllerPage>
       _ytDuration = 0;
       _ytUrlCtrl.clear();
     });
-    _emit('cast-youtube', {'videoId': videoId});
-    _showSnack('Casting YouTube to TV!');
+
+    if (_connected) {
+      _emit('cast-youtube', {'videoId': videoId});
+      _showSnack('Casting YouTube to TV Browser!');
+      _openVideoPresenter(youTubeId: videoId);
+    } else if (_dlna.isConnected) {
+      _showDlnaYouTubeDialog(videoId);
+    } else {
+      _emit('cast-youtube', {'videoId': videoId});
+      _showSnack('Playing on controller — connect TV to view on big screen');
+      _openVideoPresenter(youTubeId: videoId);
+    }
+  }
+
+  void _showDlnaYouTubeDialog(String videoId) {
+    final ip = (_deviceIp.isEmpty || _deviceIp == '...') ? '<DEVICE_IP>' : _deviceIp;
+    final tvUrl = 'http://$ip:${SlideRenderer.serverPort}/tv.html';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.borderWhite,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.play_circle_fill_rounded,
+                      color: Colors.red, size: 28),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('YouTube TV Options',
+                          style: TextStyle(
+                              color: AppColors.textHigh,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold)),
+                      SizedBox(height: 2),
+                      Text('Choose how you want to play this video',
+                          style: TextStyle(
+                              color: AppColors.textMuted, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.bg.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.borderWhite),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.tv_rounded, size: 16, color: AppColors.cyan),
+                      SizedBox(width: 6),
+                      Text('Option 1 · TV Web Browser (Recommended)',
+                          style: TextStyle(
+                              color: AppColors.cyan,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Open your TV browser to the URL below for full synchronized video and slides:',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          tvUrl,
+                          style: const TextStyle(
+                              color: AppColors.textHigh,
+                              fontSize: 11.5,
+                              fontFamily: 'monospace'),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.copy_rounded, size: 18, color: AppColors.cyan),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: tvUrl));
+                          _showSnack('TV URL copied to clipboard!');
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.purple.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.extension_rounded,
+                    color: AppColors.purpleSoft, size: 22),
+              ),
+              title: const Text('Cast to Kodi YouTube Add-on',
+                  style: TextStyle(
+                      color: AppColors.textHigh,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600)),
+              subtitle: const Text(
+                  'Sends directly to plugin.video.youtube on Kodi',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+              trailing: const Icon(Icons.chevron_right_rounded,
+                  color: AppColors.cyan),
+              onTap: () {
+                Navigator.pop(ctx);
+                _dlna.castKodiYouTube(videoId);
+                _showSnack('Sent to Kodi YouTube Add-on!');
+                _openVideoPresenter(youTubeId: videoId);
+              },
+            ),
+            const Divider(color: AppColors.borderWhite, height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.cyan.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.phone_android_rounded,
+                    color: AppColors.cyan, size: 22),
+              ),
+              title: const Text('Play on Phone Controller',
+                  style: TextStyle(
+                      color: AppColors.textHigh,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600)),
+              subtitle: const Text(
+                  'Preview and remote-control the video queue',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+              trailing: const Icon(Icons.chevron_right_rounded,
+                  color: AppColors.cyan),
+              onTap: () {
+                Navigator.pop(ctx);
+                _openVideoPresenter(youTubeId: videoId);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _ytPlayPause() {
@@ -2730,11 +2901,97 @@ class _ControllerPageState extends State<ControllerPage>
     ));
   }
 
-  /// Casts a picked file; PDFs additionally open the live presenter screen.
+  void _openVideoPresenter({int? fileIndex, String? youTubeId}) {
+    final isYt = youTubeId != null && youTubeId.isNotEmpty;
+    String title = 'Video';
+    String? localP;
+    String? streamUrl;
+
+    if (!isYt) {
+      final idx = fileIndex ?? _activeFileIndex;
+      if (idx >= 0 && idx < _uploadedFiles.length) {
+        final f = _uploadedFiles[idx];
+        title = f['name'] as String? ?? 'Video';
+        localP = f['localPath'] as String?;
+        if (localP == null || localP.isEmpty) {
+          final uploadDir = SlideRenderer.uploadDirPath;
+          if (uploadDir.isNotEmpty) {
+            final diskFile = File('$uploadDir/$title');
+            if (diskFile.existsSync()) localP = diskFile.path;
+          }
+        }
+        final url = f['url'] as String? ?? '';
+        if (url.isNotEmpty) {
+          final ip = (_deviceIp.isEmpty || _deviceIp == '...') ? '127.0.0.1' : _deviceIp;
+          streamUrl = 'http://$ip:${SlideRenderer.serverPort}$url';
+        }
+      }
+    } else {
+      title = 'YouTube';
+    }
+
+    final targetName = _dlna.isConnected
+        ? _dlna.connectedName
+        : (_connected ? 'TV Browser' : 'Controller Only');
+
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => VideoPresenterScreen(
+        title: title,
+        localPath: localP,
+        streamUrl: streamUrl,
+        youTubeId: youTubeId,
+        isYouTube: isYt,
+        tvState: tvStateN,
+        initialPosition: isYt ? _ytPosition : _videoPosition,
+        initialDuration: isYt ? _ytDuration : _videoDuration,
+        initialPlaying: isYt ? _ytPlaying : _videoPlaying,
+        initialVolume: isYt ? _ytVolumeVal : 100,
+        activeTargetName: targetName,
+        onPlayPause: (play) {
+          if (isYt) {
+            _ytPlayPause();
+          } else {
+            _videoPlayPause();
+          }
+        },
+        onSeek: (seconds) {
+          if (isYt) {
+            _ytSeekTo(seconds);
+          } else {
+            _videoSeekTo(seconds);
+          }
+        },
+        onVolume: isYt ? (v) => _ytVolume(v) : null,
+        onStop: isYt ? _ytStop : _videoStop,
+        onLogo: _castLogo,
+        onBlackout: _castBlackout,
+      ),
+    ));
+  }
+
+  /// Casts a picked file; PDFs and Videos additionally open the live presenter screen.
   Future<void> _castFileAndPresent(int idx) async {
-    final isPdf = (_uploadedFiles[idx]['type'] as String? ?? '') == 'pdf';
+    final type = _uploadedFiles[idx]['type'] as String? ?? '';
+    final isPdf = type == 'pdf';
+    final isVideo = type == 'video';
     await _castFile(idx);
     if (isPdf && mounted) _openPdfPresenter();
+    if (isVideo && mounted) _openVideoPresenter(fileIndex: idx);
+  }
+
+  String? _activeVideoTitle() {
+    if (_ytPlaying &&
+        _ytQueue.isNotEmpty &&
+        _ytQueueIndex >= 0 &&
+        _ytQueueIndex < _ytQueue.length) {
+      return 'YouTube: ${_ytQueue[_ytQueueIndex]}';
+    }
+    if (_videoPlaying &&
+        _activeFileIndex >= 0 &&
+        _activeFileIndex < _uploadedFiles.length) {
+      return _uploadedFiles[_activeFileIndex]['name'] as String? ?? 'Video';
+    }
+    return null;
   }
 
   // ══════════════════ SCHEDULE DETAIL OPENER ══════════════════
@@ -3406,6 +3663,27 @@ class _ControllerPageState extends State<ControllerPage>
             isUploading: _isUploading,
             activeFileIndex: _activeFileIndex,
             ytUrlCtrl: _ytUrlCtrl,
+            isVideoPlaying: _videoPlaying || _ytPlaying,
+            activeVideoTitle: _activeVideoTitle(),
+            onOpenVideoController: () => _openVideoPresenter(
+                fileIndex: _activeFileIndex >= 0 ? _activeFileIndex : null,
+                youTubeId: _ytPlaying && _ytQueue.isNotEmpty && _ytQueueIndex >= 0
+                    ? _ytQueue[_ytQueueIndex]
+                    : null),
+            onVideoPlayPause: () {
+              if (_ytPlaying) {
+                _ytPlayPause();
+              } else {
+                _videoPlayPause();
+              }
+            },
+            onVideoStop: () {
+              if (_ytPlaying) {
+                _ytStop();
+              } else {
+                _videoStop();
+              }
+            },
             onPickAndUploadFile: _pickAndUploadFile,
             onCastFile: _castFileAndPresent,
             onDeleteFile: _deleteUploadedFile,

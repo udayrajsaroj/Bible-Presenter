@@ -9,6 +9,11 @@ class FilesHubScreen extends StatefulWidget {
   final bool isUploading;
   final int activeFileIndex;
   final TextEditingController ytUrlCtrl;
+  final bool isVideoPlaying;
+  final String? activeVideoTitle;
+  final VoidCallback? onOpenVideoController;
+  final VoidCallback? onVideoPlayPause;
+  final VoidCallback? onVideoStop;
   final VoidCallback onPickAndUploadFile;
   final ValueChanged<int> onCastFile;
   final ValueChanged<int> onDeleteFile;
@@ -21,6 +26,11 @@ class FilesHubScreen extends StatefulWidget {
     required this.isUploading,
     required this.activeFileIndex,
     required this.ytUrlCtrl,
+    this.isVideoPlaying = false,
+    this.activeVideoTitle,
+    this.onOpenVideoController,
+    this.onVideoPlayPause,
+    this.onVideoStop,
     required this.onPickAndUploadFile,
     required this.onCastFile,
     required this.onDeleteFile,
@@ -172,6 +182,90 @@ class _FilesHubScreenState extends State<FilesHubScreen> {
           ]),
         ),
       ),
+      bottomNavigationBar: widget.activeVideoTitle != null &&
+              widget.activeVideoTitle!.isNotEmpty
+          ? Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceSolid,
+                borderRadius: BorderRadius.circular(AppRadii.cardMd),
+                border: Border.all(color: AppColors.cyan.withOpacity(0.5), width: 1.4),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.cyan.withOpacity(0.18),
+                    blurRadius: 16,
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: AppColors.cyan.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.play_circle_fill_rounded,
+                        color: AppColors.cyan, size: 24),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: widget.onOpenVideoController,
+                      behavior: HitTestBehavior.opaque,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(widget.activeVideoTitle!,
+                              style: const TextStyle(
+                                  color: AppColors.textHigh,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          const SizedBox(height: 2),
+                          const Row(
+                            children: [
+                              Icon(Icons.tv_rounded, size: 12, color: AppColors.green),
+                              SizedBox(width: 4),
+                              Text('Live Video • Tap for Full Controller',
+                                  style: TextStyle(
+                                      color: AppColors.cyan, fontSize: 10.5)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (widget.onVideoPlayPause != null)
+                    IconButton(
+                      icon: Icon(
+                        widget.isVideoPlaying
+                            ? Icons.pause_circle_filled_rounded
+                            : Icons.play_circle_fill_rounded,
+                        color: AppColors.cyan,
+                        size: 30,
+                      ),
+                      onPressed: widget.onVideoPlayPause,
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.fullscreen_rounded,
+                        color: AppColors.textHigh, size: 24),
+                    onPressed: widget.onOpenVideoController,
+                  ),
+                  if (widget.onVideoStop != null)
+                    IconButton(
+                      icon: const Icon(Icons.stop_circle_rounded,
+                          color: AppColors.red, size: 22),
+                      onPressed: widget.onVideoStop,
+                    ),
+                ],
+              ),
+            )
+          : null,
     );
   }
 }
@@ -409,11 +503,18 @@ class _FileCard extends StatelessWidget {
             height: 38,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.cyan.withOpacity(0.14),
-              border: Border.all(color: AppColors.cyan.withOpacity(0.55)),
+              color: active
+                  ? AppColors.green.withOpacity(0.2)
+                  : AppColors.cyan.withOpacity(0.14),
+              border: Border.all(
+                  color: active
+                      ? AppColors.green
+                      : AppColors.cyan.withOpacity(0.55)),
             ),
-            child: const Icon(Icons.play_arrow_rounded,
-                color: AppColors.cyan, size: 24),
+            child: Icon(
+                active ? Icons.tv_rounded : Icons.play_arrow_rounded,
+                color: active ? AppColors.green : AppColors.cyan,
+                size: 22),
           ),
         ),
         const SizedBox(width: 4),

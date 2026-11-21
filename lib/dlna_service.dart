@@ -266,6 +266,9 @@ class DlnaService extends ChangeNotifier {
 
   /// Sends a local video file; the TV's native player takes over playback,
   /// hardware decoding and its own remote's pause/seek.
+  /// Uses 'object.item.videoItem.movie' UPnP class so renderers (such as Kodi
+  /// and Smart TVs) route playback to their video rendering pipeline instead
+  /// of falling back to audio-only.
   Future<bool> castVideo(String url, {String title = 'Video'}) async {
     var device = connectedDevice;
     if (device == null) return false;
@@ -273,7 +276,7 @@ class DlnaService extends ChangeNotifier {
       await _api.setMediaUri(
         device.udn,
         Url(value: url),
-        VideoMetadata(title: title, upnpClass: 'object.item.videoItem'),
+        VideoMetadata(title: title, upnpClass: 'object.item.videoItem.movie'),
       );
       await _api.play(device.udn);
       if (rendererOffline) {
@@ -291,7 +294,7 @@ class DlnaService extends ChangeNotifier {
           await _api.setMediaUri(
             device.udn,
             Url(value: url),
-            VideoMetadata(title: title, upnpClass: 'object.item.videoItem'),
+            VideoMetadata(title: title, upnpClass: 'object.item.videoItem.movie'),
           );
           await _api.play(device.udn);
           rendererOffline = false;
@@ -304,6 +307,15 @@ class DlnaService extends ChangeNotifier {
       _markOffline();
       return false;
     }
+  }
+
+  /// Sends a YouTube link formatted for Kodi's official YouTube add-on
+  /// (plugin.video.youtube) over DLNA/UPnP.
+  Future<bool> castKodiYouTube(String videoId, {String title = 'YouTube'}) async {
+    return castVideo(
+      'plugin://plugin.video.youtube/play/?video_id=$videoId',
+      title: title,
+    );
   }
 
   Future<void> pause() async {

@@ -120,6 +120,7 @@ class AppRadii {
   AppRadii._();
 
   static const double card = 20;
+  static const double cardMd = 16;
   static const double cardLg = 24;
   static const double pill = 50;
   static const double button = 16;
