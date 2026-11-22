@@ -18,6 +18,8 @@ class SongsHubScreen extends StatefulWidget {
   final ValueChanged<int> onEditSong;
   final ValueChanged<int> onDeleteSong;
   final VoidCallback onBack;
+  final int? fontSize;
+  final ValueChanged<int>? onFontSizeChanged;
 
   const SongsHubScreen({
     super.key,
@@ -33,6 +35,8 @@ class SongsHubScreen extends StatefulWidget {
     required this.onEditSong,
     required this.onDeleteSong,
     required this.onBack,
+    this.fontSize,
+    this.onFontSizeChanged,
   });
 
   @override
@@ -143,6 +147,31 @@ class _SongsHubScreenState extends State<SongsHubScreen> {
             icon: Icons.library_music_rounded,
             title: 'Songs',
             actions: [
+              PopupMenuButton<int>(
+                tooltip: 'Font size',
+                icon: const Icon(Icons.format_size_rounded,
+                    size: 20, color: AppColors.textMuted),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                color: AppColors.surfaceSolid,
+                onSelected: (size) {
+                  widget.onFontSizeChanged?.call(size);
+                  setState(() {});
+                },
+                itemBuilder: (_) => [36, 44, 52, 60, 68, 80, 96, 112]
+                    .map((s) => PopupMenuItem<int>(
+                        value: s,
+                        child: Text('$s sp',
+                            style: TextStyle(
+                                color: (widget.fontSize ?? 44) == s
+                                    ? AppColors.gold
+                                    : AppColors.textHigh,
+                                fontSize: 13,
+                                fontWeight: (widget.fontSize ?? 44) == s
+                                    ? FontWeight.bold
+                                    : FontWeight.normal))))
+                    .toList(),
+              ),
               IconButton(
                 tooltip: 'Add song',
                 onPressed: widget.onAddSong,

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +12,7 @@ class SongState extends ChangeNotifier {
   String _songSearchQuery = '';
   int _selectedSongIndex = -1;
   int _selectedStanzaIndex = 0;
+  int _fontSize = 44;
   final TextEditingController _songSearchController = TextEditingController();
   final TextEditingController _songTitleController = TextEditingController();
   final List<TextEditingController> _songStanzaControllers = [
@@ -31,6 +31,7 @@ class SongState extends ChangeNotifier {
   String get songSearchQuery => _songSearchQuery;
   int get selectedSongIndex => _selectedSongIndex;
   int get selectedStanzaIndex => _selectedStanzaIndex;
+  int get fontSize => _fontSize;
   TextEditingController get songSearchController => _songSearchController;
   TextEditingController get songTitleController => _songTitleController;
   List<TextEditingController> get songStanzaControllers =>
@@ -115,6 +116,22 @@ class SongState extends ChangeNotifier {
     }
   }
 
+  set fontSize(int size) {
+    final clamped = size.clamp(24, 120);
+    if (_fontSize != clamped) {
+      _fontSize = clamped;
+      _saveFontSize();
+      notifyListeners();
+    }
+  }
+
+  Future<void> _saveFontSize() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('song_font_size', _fontSize);
+    } catch (_) {}
+  }
+
   // Public methods
   Future<void> _loadSongs() async {
     try {
@@ -131,6 +148,9 @@ class SongState extends ChangeNotifier {
       }
       try {
         final prefs = await SharedPreferences.getInstance();
+        _fontSize = prefs.getInt('song_font_size') ??
+            prefs.getInt('font_size') ??
+            44;
         final manualSongsStr = prefs.getString('manual_songs') ?? '[]';
         final List<dynamic> manualSongs =
             jsonDecode(manualSongsStr) as List<dynamic>;

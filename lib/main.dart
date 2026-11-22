@@ -606,7 +606,7 @@ class _ControllerPageState extends State<ControllerPage>
               'stanzas': _stripStanzaLabels(stanzas),
               'currentStanza': i,
               'totalStanzas': stanzas.length,
-              'fontSize': BibleState.of(context).fontSize,
+              'fontSize': SongState.of(context).fontSize,
               if (_bgUrl != null) 'background': {'url': _bgUrl}
             });
           },
@@ -783,7 +783,7 @@ class _ControllerPageState extends State<ControllerPage>
       'stanzas': _stripStanzaLabels(stanzas),
       'currentStanza': songState.selectedStanzaIndex,
       'totalStanzas': stanzas.length,
-      'fontSize': BibleState.of(context).fontSize,
+      'fontSize': songState.fontSize,
       if (_bgUrl != null) 'background': {'url': _bgUrl}
     });
     _preRenderNext();
@@ -963,6 +963,8 @@ class _ControllerPageState extends State<ControllerPage>
           songsLoaded: songs.songsLoaded,
           searchCtrl: songs.songSearchController,
           selectedSongIndex: songs.selectedSongIndex,
+          fontSize: songs.fontSize,
+          onFontSizeChanged: (v) => songs.fontSize = v,
           onAddSong: _showAddSongModal,
           onImportWord: _importSongWord,
           onFilterSongs: (query) => songs.songSearchQuery = query,
@@ -2867,6 +2869,7 @@ class _ControllerPageState extends State<ControllerPage>
         onLogo: _castLogo,
         onBlackout: _castBlackout,
         onClear: _clearScreen,
+        onCastSong: _castSong,
       ),
     ));
   }

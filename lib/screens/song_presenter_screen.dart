@@ -19,6 +19,7 @@ class SongPresenterScreen extends StatefulWidget {
   final VoidCallback onLogo;
   final VoidCallback onBlackout;
   final VoidCallback onClear;
+  final VoidCallback? onCastSong;
 
   const SongPresenterScreen({
     super.key,
@@ -30,6 +31,7 @@ class SongPresenterScreen extends StatefulWidget {
     required this.onLogo,
     required this.onBlackout,
     required this.onClear,
+    this.onCastSong,
   });
 
   static final _labelRe = RegExp(r'^\s*\[([^\]]+)\]\s*$');
@@ -55,9 +57,6 @@ class SongPresenterScreen extends StatefulWidget {
 class _SongPresenterScreenState extends State<SongPresenterScreen> {
   final _stageScroll = ScrollController();
 
-  /// Chip label for a stanza: uses its [Chorus]/[Verse] tag when present
-  /// (numbered per occurrence), otherwise "Stanza N".
-
   /// Drops a leading [Label] line so the stage shows clean lyrics (the same
   /// rule the TV renderer applies).
   String _cleanLyrics(String stanza) =>
@@ -75,6 +74,14 @@ class _SongPresenterScreenState extends State<SongPresenterScreen> {
     if (v > 120) widget.onPrevStanza();
   }
 
+  void _recastSong() {
+    if (widget.onCastSong != null) {
+      widget.onCastSong!();
+    } else {
+      widget.onSelectStanza(widget.songState.selectedStanzaIndex);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -88,7 +95,7 @@ class _SongPresenterScreenState extends State<SongPresenterScreen> {
             leading: _backBtn(context),
             title: song?['title'] as String? ?? 'Song',
             tvState: widget.tvState,
-            headerActions: _emergencyActions(),
+            headerActions: _headerActions(),
             body: Center(
                 child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -114,46 +121,63 @@ class _SongPresenterScreenState extends State<SongPresenterScreen> {
           }
         });
 
+        final fs = widget.songState.fontSize;
+        final previewFontSize = (26.0 * (fs / 44.0)).clamp(16.0, 48.0);
+
         return PresenterScaffold(
           leading: _backBtn(context),
           title: song?['title'] as String? ?? 'Song',
           subtitle: '${stanzas.length} slides',
           tvState: widget.tvState,
-          headerActions: _emergencyActions(),
+          headerActions: _headerActions(),
           headerStrip: _StanzaChips(
             labels: labels,
             activeIndex: index,
             onTap: widget.onSelectStanza,
           ),
-          body: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onHorizontalDragEnd: _onSwipe,
-            child: SingleChildScrollView(
-              controller: _stageScroll,
-              physics: const BouncingScrollPhysics(),
-              child: Container(
-                constraints: BoxConstraints(
-                    minHeight: MediaQuery.of(context).size.height - 220),
-                alignment: Alignment.center,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-                child: Text(
-                  lyrics,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: kText,
-                    fontSize: 26,
-                    height: 1.75,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.2,
-                    shadows: [
-                      Shadow(
-                          color: Colors.black.withOpacity(0.6), blurRadius: 18)
-                    ],
+          body: Column(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragEnd: _onSwipe,
+                  child: SingleChildScrollView(
+                    controller: _stageScroll,
+                    physics: const BouncingScrollPhysics(),
+                    child: Container(
+                      constraints: BoxConstraints(
+                          minHeight: MediaQuery.of(context).size.height - 280),
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 24),
+                      child: Text(
+                        lyrics,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: kText,
+                          fontSize: previewFontSize,
+                          height: 1.75,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                          shadows: [
+                            Shadow(
+                                color: Colors.black.withOpacity(0.6),
+                                blurRadius: 18)
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              _SongTextControllerBar(
+                fontSize: fs,
+                onChanged: (newSize) {
+                  widget.songState.fontSize = newSize;
+                  _recastSong();
+                },
+              ),
+            ],
           ),
           dockLeft: DockNavButton(
             label: 'PREV',
@@ -181,20 +205,157 @@ class _SongPresenterScreenState extends State<SongPresenterScreen> {
         onTap: () => Navigator.of(context).pop(),
       );
 
-  List<Widget> _emergencyActions() => [
-        PresenterIconButton(
-            icon: Icons.image_outlined,
-            tooltip: 'Show church logo',
-            onTap: widget.onLogo),
-        PresenterIconButton(
-            icon: Icons.dark_mode_outlined,
-            tooltip: 'Blackout screen',
-            onTap: widget.onBlackout),
-        PresenterIconButton(
-            icon: Icons.close,
-            tooltip: 'Clear screen',
-            onTap: widget.onClear),
-      ];
+  List<Widget> _headerActions() {
+    final curFs = widget.songState.fontSize;
+    return [
+      // Font size popover ("Tt") — identical to BiblePresenterScreen
+      PopupMenuButton<int>(
+        tooltip: 'Font size',
+        icon: const Icon(Icons.format_size, size: 20, color: kText),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        color: kBg2,
+        onSelected: (size) {
+          widget.songState.fontSize = size;
+          _recastSong();
+        },
+        itemBuilder: (_) => [36, 44, 52, 60, 68, 80, 96, 112]
+            .map((s) => PopupMenuItem<int>(
+                value: s,
+                child: Text('$s sp',
+                    style: TextStyle(
+                        color: curFs == s ? kGold : kText,
+                        fontSize: 13,
+                        fontWeight: curFs == s
+                            ? FontWeight.bold
+                            : FontWeight.normal))))
+            .toList(),
+      ),
+      PresenterIconButton(
+          icon: Icons.image_outlined,
+          tooltip: 'Show church logo',
+          onTap: widget.onLogo),
+      PresenterIconButton(
+          icon: Icons.dark_mode_outlined,
+          tooltip: 'Blackout screen',
+          onTap: widget.onBlackout),
+      PresenterIconButton(
+          icon: Icons.close,
+          tooltip: 'Clear screen',
+          onTap: widget.onClear),
+    ];
+  }
+}
+
+/// Dedicated phone-screen text controller bar for songs (A- / slider / A+ / size badge).
+class _SongTextControllerBar extends StatelessWidget {
+  final int fontSize;
+  final ValueChanged<int> onChanged;
+
+  const _SongTextControllerBar({
+    required this.fontSize,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: kBg2.withOpacity(0.92),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: kBorder.withOpacity(0.8), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // A- button (quick step down)
+          IconButton(
+            icon: const Text(
+              'A-',
+              style: TextStyle(
+                color: kText,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            splashRadius: 18,
+            tooltip: 'Decrease text size',
+            onPressed: fontSize > 24
+                ? () => onChanged((fontSize - 4).clamp(24, 120))
+                : null,
+          ),
+          const SizedBox(width: 4),
+          // Slider
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3.5,
+                activeTrackColor: kAccent,
+                inactiveTrackColor: kBorder,
+                thumbColor: kAccent,
+                overlayColor: kAccent.withOpacity(0.2),
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+              ),
+              child: Slider(
+                value: fontSize.toDouble().clamp(24.0, 120.0),
+                min: 24,
+                max: 120,
+                onChanged: (val) => onChanged(val.round()),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Current font size display badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: kAccent.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: kAccent.withOpacity(0.4)),
+            ),
+            child: Text(
+              '$fontSize sp',
+              style: const TextStyle(
+                color: kAccent,
+                fontSize: 11,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          // A+ button (quick step up)
+          IconButton(
+            icon: const Text(
+              'A+',
+              style: TextStyle(
+                color: kGold,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            splashRadius: 18,
+            tooltip: 'Increase text size',
+            onPressed: fontSize < 120
+                ? () => onChanged((fontSize + 4).clamp(24, 120))
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Dock center: position + live status from TV state.
