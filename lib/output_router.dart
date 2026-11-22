@@ -239,10 +239,10 @@ class OutputRouter {
     // A newer cast superseded this one — drop the push (the cache entry
     // above stays useful; only the TV push must not be stale).
     if (gen != _pushGen) return;
-    final url = await SlideRenderer.publish(png);
+    final url = await SlideRenderer.publish(png, stable: true);
     if (url == null) return;
     if (gen != _pushGen) return;
-    await DlnaService.instance.castImage(url);
+    await DlnaService.instance.castSlide(url);
   }
 
   /// Blackout on a DLNA TV: render a solid full-HD black PNG once and publish
@@ -266,10 +266,10 @@ class OutputRouter {
       }
       if (png == null) return;
       if (gen != _pushGen) return;
-      final url = await SlideRenderer.publish(png);
+      final url = await SlideRenderer.publish(png, stable: true);
       if (url == null) return;
       if (gen != _pushGen) return;
-      await DlnaService.instance.castImage(url, title: 'Blackout');
+      await DlnaService.instance.castSlide(url, title: 'Blackout');
     } catch (_) {
       // Blackout is best-effort; the phone UI still shows OFF AIR state.
     }
@@ -313,10 +313,10 @@ class OutputRouter {
     }
     if (png == null) return;
     if (gen != _pushGen) return;
-    final url = await SlideRenderer.publish(png);
+    final url = await SlideRenderer.publish(png, stable: true);
     if (url == null) return;
     if (gen != _pushGen) return;
-    await DlnaService.instance.castImage(url, title: 'Page $page');
+    await DlnaService.instance.castSlide(url, title: 'Page $page');
   }
 
   /// Pre-renders the next PDF page into the cache (plan D4).

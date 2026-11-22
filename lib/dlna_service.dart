@@ -4,6 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:media_cast_dlna/media_cast_dlna.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Active media type loaded on the DLNA renderer.
+enum DlnaMediaType {
+  none,
+  slide,
+  video,
+  image,
+}
+
 /// DLNA "TV Direct" service (Phase D2).
 ///
 /// The only file in the app that talks to the media_cast_dlna package: it
@@ -27,6 +35,15 @@ class DlnaService extends ChangeNotifier {
   /// The currently connected TV, null when idle.
   DlnaDevice? connectedDevice;
 
+  /// Active media type on the connected renderer.
+  DlnaMediaType currentMediaType = DlnaMediaType.none;
+
+  /// Active media URI loaded on the connected renderer.
+  String? currentMediaUri;
+
+  /// True when the renderer is in an active playback session.
+  bool isSessionActive = false;
+
   bool _initialized = false;
   bool _scanning = false;
   StreamSubscription? _foundSub;
@@ -48,6 +65,28 @@ class DlnaService extends ChangeNotifier {
   bool get isConnected => connectedDevice != null;
 
   String? get connectedName => connectedDevice?.friendlyName;
+
+  // ── Logging ──
+
+  static void _log(String message) {
+    final now = DateTime.now();
+    final timeStr =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}.${now.millisecond.toString().padLeft(3, '0')}';
+    debugPrint('[DLNA $timeStr] $message');
+  }
+
+  static void _logCmd(String cmd, String details) {
+    _log('>>> COMMAND: $cmd | $details');
+  }
+
+  static void _logResult(String cmd, bool success,
+      {int? durationMs, Object? error}) {
+    if (success) {
+      _log('<<< SUCCESS: $cmd${durationMs != null ? " (${durationMs}ms)" : ""}');
+    } else {
+      _log('<<< FAILED: $cmd${durationMs != null ? " (${durationMs}ms)" : ""}${error != null ? " | Error: $error" : ""}');
+    }
+  }
 
   // ── Lifecycle ──
 
@@ -151,12 +190,19 @@ class DlnaService extends ChangeNotifier {
 
   /// Selects a TV, remembers it in SharedPreferences for the one-tap
   /// reconnect banner, and clears the offline flag.
+  /// Connection is established ONCE and maintained throughout the session.
   Future<void> connect(DlnaDevice device) async {
     connectedDevice = device;
     rendererOffline = false;
+    isSessionActive = false;
+    currentMediaUri = null;
+    currentMediaType = DlnaMediaType.none;
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('dlna_last_udn', device.udn.value);
     await prefs.setString('dlna_last_name', device.friendlyName);
+
+    _log('[SESSION] Connected to TV: "${device.friendlyName}" (${device.udn.value}). Connection established once.');
     notifyListeners();
   }
 
@@ -181,8 +227,7 @@ class DlnaService extends ChangeNotifier {
     try {
       if (!await _api.isDeviceOnline(DeviceUdn(value: udn))) return null;
       final fresh = await _api.refreshDevice(DeviceUdn(value: udn));
-      if (fresh != null &&
-          fresh.deviceType.contains('MediaRenderer')) {
+      if (fresh != null && fresh.deviceType.contains('MediaRenderer')) {
         return fresh;
       }
     } catch (e) {
@@ -197,9 +242,15 @@ class DlnaService extends ChangeNotifier {
     }
     connectedDevice = null;
     rendererOffline = false;
+    isSessionActive = false;
+    currentMediaUri = null;
+    currentMediaType = DlnaMediaType.none;
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('dlna_last_udn');
     await prefs.remove('dlna_last_name');
+
+    _log('[SESSION] Disconnected from TV. DLNA session cleared.');
     notifyListeners();
   }
 
@@ -207,59 +258,162 @@ class DlnaService extends ChangeNotifier {
 
   int _castImageGeneration = 0;
 
-  /// Sends a slide image to the TV: SetAVTransportURI with photo item
-  /// metadata (object.item.imageItem.photo — best-supported media class
-  /// across TV brands) followed by Play. Supersedes stale commands if
-  /// verses switch quickly, avoiding queued backlogs.
+  /// Sends a presentation slide to the TV.
+  ///
+  /// Reuses existing connection & session:
+  /// When a slide session is already established on the TV with the same media
+  /// resource URI, this avoids repeatedly sending SetAVTransportURI and Play.
+  /// Repeated SetAVTransportURI calls cause Google TV / Toshiba TV to reset its
+  /// media session and display "A device is connected to your TV" on every slide
+  /// change.
+  ///
+  /// For in-session slide changes, the HTTP server updates the slide bytes at the
+  /// existing URI in memory, and this method updates content using the existing connection.
+  Future<bool> castSlide(
+    String url, {
+    String title = 'BiblePresenter',
+    bool forceNewSession = false,
+  }) async {
+    var device = connectedDevice;
+    if (device == null) {
+      _log('castSlide skipped: No TV connected');
+      return false;
+    }
+
+    final int generation = ++_castImageGeneration;
+    final bool isSameResource = isConnected &&
+        isSessionActive &&
+        currentMediaType == DlnaMediaType.slide &&
+        currentMediaUri == url;
+
+    _log('[SESSION] Device: "${device.friendlyName}" | Active: $isSessionActive | Media: $currentMediaType | URI: $url | SameResource: $isSameResource');
+
+    if (!isSameResource || forceNewSession) {
+      // ── Establish New Media Session ──
+      // Genuinely requires SetAVTransportURI + Play because the media resource or
+      // media type has changed (e.g. initial slide, or coming from video).
+      _log('Establishing NEW slide session with URI: $url (previous URI: $currentMediaUri)');
+
+      final sw = Stopwatch()..start();
+      try {
+        _logCmd('SetAVTransportURI',
+            'Device: "${device.friendlyName}", URI: "$url", Title: "$title", Class: "object.item.imageItem.photo"');
+        await _api.setMediaUri(
+          device.udn,
+          Url(value: url),
+          ImageMetadata(title: title, upnpClass: 'object.item.imageItem.photo'),
+        );
+        sw.stop();
+        _logResult('SetAVTransportURI', true,
+            durationMs: sw.elapsedMilliseconds);
+
+        if (generation != _castImageGeneration) {
+          _log('Session establishment superseded by generation $generation');
+          return false;
+        }
+
+        sw.reset();
+        sw.start();
+        _logCmd('Play', 'Device: "${device.friendlyName}"');
+        await _api.play(device.udn);
+        sw.stop();
+        _logResult('Play', true, durationMs: sw.elapsedMilliseconds);
+
+        if (generation != _castImageGeneration) {
+          return false;
+        }
+
+        currentMediaUri = url;
+        currentMediaType = DlnaMediaType.slide;
+        isSessionActive = true;
+        if (rendererOffline) {
+          rendererOffline = false;
+          notifyListeners();
+        }
+        return true;
+      } catch (e) {
+        sw.stop();
+        _logResult('SetAVTransportURI / Play', false,
+            durationMs: sw.elapsedMilliseconds, error: e);
+        _log('Failed to establish slide session: $e');
+        return false;
+      }
+    } else {
+      // ── In-Session Slide Change: Reuse Existing Connection ──
+      // The slide image at $url has already been updated in the server's RAM cache and on disk.
+      // Do NOT send SetAVTransportURI again — that is what triggers the Toshiba Google TV
+      // "A device is connected to your TV" notification on every slide change!
+      _log('In-session slide change. Reusing existing connection ($url). Skipping SetAVTransportURI.');
+
+      // Issue a lightweight Play to prompt the renderer to reload the current URI,
+      // but gracefully handle renderers that return "Transition not available" (already playing).
+      final sw = Stopwatch()..start();
+      try {
+        _logCmd('Play (in-session refresh)', 'Device: "${device.friendlyName}"');
+        await _api.play(device.udn);
+        sw.stop();
+        _logResult('Play (in-session refresh)', true,
+            durationMs: sw.elapsedMilliseconds);
+      } catch (e) {
+        sw.stop();
+        // UPnP 701 (Transition not available) or 501 is common when already in PLAYING state.
+        _log('Play (in-session refresh) non-fatal response: $e (renderer may already be playing)');
+      }
+
+      if (rendererOffline) {
+        rendererOffline = false;
+        notifyListeners();
+      }
+      return true;
+    }
+  }
+
+  /// Sends a standalone image to the TV: SetAVTransportURI with photo item
+  /// metadata (object.item.imageItem.photo) followed by Play.
   Future<bool> castImage(String url, {String title = 'BiblePresenter'}) async {
     var device = connectedDevice;
-    if (device == null) return false;
+    if (device == null) {
+      _log('castImage skipped: No TV connected');
+      return false;
+    }
+
     final int generation = ++_castImageGeneration;
+    final sw = Stopwatch()..start();
     try {
+      _logCmd('SetAVTransportURI (Image)',
+          'Device: "${device.friendlyName}", URI: "$url", Title: "$title"');
       await _api.setMediaUri(
         device.udn,
         Url(value: url),
         ImageMetadata(title: title, upnpClass: 'object.item.imageItem.photo'),
       );
-      if (generation != _castImageGeneration) {
-        return false;
-      }
+      sw.stop();
+      _logResult('SetAVTransportURI (Image)', true,
+          durationMs: sw.elapsedMilliseconds);
+
+      if (generation != _castImageGeneration) return false;
+
+      sw.reset();
+      sw.start();
+      _logCmd('Play (Image)', 'Device: "${device.friendlyName}"');
       await _api.play(device.udn);
-      if (generation != _castImageGeneration) {
-        return false;
-      }
+      sw.stop();
+      _logResult('Play (Image)', true, durationMs: sw.elapsedMilliseconds);
+
+      if (generation != _castImageGeneration) return false;
+
+      currentMediaUri = url;
+      currentMediaType = DlnaMediaType.image;
+      isSessionActive = true;
       if (rendererOffline) {
         rendererOffline = false;
         notifyListeners();
       }
       return true;
     } catch (e) {
-      if (generation != _castImageGeneration) {
-        return false;
-      }
-      debugPrint('[Dlna] castImage attempt 1 failed: $e');
-      final revived = await pingStored(device.udn.value);
-      if (revived != null) {
-        connectedDevice = revived;
-        device = revived;
-        try {
-          if (generation != _castImageGeneration) return false;
-          await _api.setMediaUri(
-            device.udn,
-            Url(value: url),
-            ImageMetadata(title: title, upnpClass: 'object.item.imageItem.photo'),
-          );
-          if (generation != _castImageGeneration) return false;
-          await _api.play(device.udn);
-          if (generation != _castImageGeneration) return false;
-          rendererOffline = false;
-          notifyListeners();
-          return true;
-        } catch (e2) {
-          debugPrint('[Dlna] castImage retry failed: $e2');
-        }
-      }
-      _markOffline();
+      sw.stop();
+      _logResult('castImage', false,
+          durationMs: sw.elapsedMilliseconds, error: e);
       return false;
     }
   }
@@ -271,47 +425,51 @@ class DlnaService extends ChangeNotifier {
   /// of falling back to audio-only.
   Future<bool> castVideo(String url, {String title = 'Video'}) async {
     var device = connectedDevice;
-    if (device == null) return false;
+    if (device == null) {
+      _log('castVideo skipped: No TV connected');
+      return false;
+    }
+
+    final sw = Stopwatch()..start();
     try {
+      _logCmd('SetAVTransportURI (Video)',
+          'Device: "${device.friendlyName}", URI: "$url", Title: "$title", Class: "object.item.videoItem.movie"');
       await _api.setMediaUri(
         device.udn,
         Url(value: url),
         VideoMetadata(title: title, upnpClass: 'object.item.videoItem.movie'),
       );
+      sw.stop();
+      _logResult('SetAVTransportURI (Video)', true,
+          durationMs: sw.elapsedMilliseconds);
+
+      sw.reset();
+      sw.start();
+      _logCmd('Play (Video)', 'Device: "${device.friendlyName}"');
       await _api.play(device.udn);
+      sw.stop();
+      _logResult('Play (Video)', true, durationMs: sw.elapsedMilliseconds);
+
+      currentMediaUri = url;
+      currentMediaType = DlnaMediaType.video;
+      isSessionActive = true;
       if (rendererOffline) {
         rendererOffline = false;
         notifyListeners();
       }
       return true;
     } catch (e) {
-      debugPrint('[Dlna] castVideo attempt 1 failed: $e');
-      final revived = await pingStored(device.udn.value);
-      if (revived != null) {
-        connectedDevice = revived;
-        device = revived;
-        try {
-          await _api.setMediaUri(
-            device.udn,
-            Url(value: url),
-            VideoMetadata(title: title, upnpClass: 'object.item.videoItem.movie'),
-          );
-          await _api.play(device.udn);
-          rendererOffline = false;
-          notifyListeners();
-          return true;
-        } catch (e2) {
-          debugPrint('[Dlna] castVideo retry failed: $e2');
-        }
-      }
-      _markOffline();
+      sw.stop();
+      _logResult('castVideo', false,
+          durationMs: sw.elapsedMilliseconds, error: e);
       return false;
     }
   }
 
   /// Sends a YouTube link formatted for Kodi's official YouTube add-on
   /// (plugin.video.youtube) over DLNA/UPnP.
-  Future<bool> castKodiYouTube(String videoId, {String title = 'YouTube'}) async {
+  Future<bool> castKodiYouTube(String videoId,
+      {String title = 'YouTube'}) async {
     return castVideo(
       'plugin://plugin.video.youtube/play/?video_id=$videoId',
       title: title,
@@ -320,19 +478,31 @@ class DlnaService extends ChangeNotifier {
 
   Future<void> pause() async {
     if (!_canControl) return;
+    final sw = Stopwatch()..start();
     try {
+      _logCmd('Pause', 'Device: "${connectedDevice!.friendlyName}"');
       await _api.pause(connectedDevice!.udn);
+      sw.stop();
+      _logResult('Pause', true, durationMs: sw.elapsedMilliseconds);
     } catch (e) {
-      debugPrint('[Dlna] pause failed: $e');
+      sw.stop();
+      _logResult('Pause', false,
+          durationMs: sw.elapsedMilliseconds, error: e);
     }
   }
 
   Future<void> resume() async {
     if (!_canControl) return;
+    final sw = Stopwatch()..start();
     try {
+      _logCmd('Play (Resume)', 'Device: "${connectedDevice!.friendlyName}"');
       await _api.play(connectedDevice!.udn);
+      sw.stop();
+      _logResult('Play (Resume)', true, durationMs: sw.elapsedMilliseconds);
     } catch (e) {
-      debugPrint('[Dlna] resume failed: $e');
+      sw.stop();
+      _logResult('Play (Resume)', false,
+          durationMs: sw.elapsedMilliseconds, error: e);
     }
   }
 
@@ -340,20 +510,37 @@ class DlnaService extends ChangeNotifier {
   /// TV's native player honors it; see plan 6.4).
   Future<void> seek(int seconds) async {
     if (!_canControl) return;
+    final sw = Stopwatch()..start();
     try {
+      _logCmd('Seek',
+          'Device: "${connectedDevice!.friendlyName}", Position: ${seconds}s');
       await _api.seek(connectedDevice!.udn, TimePosition(seconds: seconds));
+      sw.stop();
+      _logResult('Seek', true, durationMs: sw.elapsedMilliseconds);
     } catch (e) {
-      debugPrint('[Dlna] seek failed: $e');
+      sw.stop();
+      _logResult('Seek', false,
+          durationMs: sw.elapsedMilliseconds, error: e);
     }
   }
 
   /// DLNA Stop: returns the TV to idle. Also maps onto clear-screen.
   Future<void> stop() async {
     if (!_canControl) return;
+    final sw = Stopwatch()..start();
     try {
+      _logCmd('Stop', 'Device: "${connectedDevice!.friendlyName}"');
       await _api.stop(connectedDevice!.udn);
+      sw.stop();
+      _logResult('Stop', true, durationMs: sw.elapsedMilliseconds);
     } catch (e) {
-      debugPrint('[Dlna] stop failed: $e');
+      sw.stop();
+      _logResult('Stop', false,
+          durationMs: sw.elapsedMilliseconds, error: e);
+    } finally {
+      isSessionActive = false;
+      currentMediaUri = null;
+      currentMediaType = DlnaMediaType.none;
     }
   }
 

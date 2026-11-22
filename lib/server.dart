@@ -378,8 +378,9 @@ Future<void> startServer(dynamic message) async {
       return Response.ok(bytes, headers: {
         'Content-Type': _contentType(safeName),
         'Content-Length': '${bytes.length}',
-        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
         'Pragma': 'no-cache',
+        'Expires': '0',
         'Access-Control-Allow-Origin': '*',
       });
     } catch (e) {

@@ -23,7 +23,7 @@ import 'package:image/image.dart' as img;
 /// [RenderRepaintBoundary.toImage] at pixel ratio 1.0.
 ///
 /// [publish] writes the PNG into a `dlna/` subfolder of the upload directory
-/// (shared with the server Isolate, which serves it at GET /dlna/<file> with
+/// (shared with the server Isolate, which serves it at `GET /dlna/<file>` with
 /// Cache-Control: no-store) and returns the phone-side URL that is handed to
 /// the TV's SetAVTransportURI call.
 class SlideRenderer {
@@ -222,24 +222,35 @@ class SlideRenderer {
   /// Writes a captured slide to `<uploadDir>/dlna/slide_<n>.(jpg|png)` and returns the
   /// URL the TV should download. Saves in RAM and writes to disk asynchronously (flush: false)
   /// with zero main-thread stall and no synchronous directory scans.
-  static Future<String?> publish(Uint8List bytes) async {
+  ///
+  /// When [stable] is true, also updates `<uploadDir>/dlna/current_slide.(jpg|png)`
+  /// and returns that stable URL, maintaining the exact same DLNA media resource across
+  /// slide changes so the TV does not trigger a "device connected" notification on every slide.
+  static Future<String?> publish(Uint8List bytes, {bool stable = false}) async {
     if (uploadDirPath.isEmpty) return null;
     _slideCounter++;
 
     final isJpg = bytes.length > 2 && bytes[0] == 0xFF && bytes[1] == 0xD8;
     final ext = isJpg ? 'jpg' : 'png';
     final name = 'slide_$_slideCounter.$ext';
+    final stableName = 'current_slide.$ext';
 
     // Store in RAM for instantaneous delivery
     memorySlides[name] = bytes;
+    if (stable) {
+      memorySlides[stableName] = bytes;
+    }
     if (memorySlides.length > _maxMemorySlides) {
       memorySlides.remove(memorySlides.keys.first);
     }
 
-    // Warm the server isolate's RAM cache FIRST so the TV's GET is a memory
+    // Warm the server isolate's RAM cache FIRST so the TV's first GET is a memory
     // hit even while the disk write below is still in flight. Fire-and-forget.
     try {
       warmPort?.send({'warm': name, 'bytes': bytes});
+      if (stable) {
+        warmPort?.send({'warm': stableName, 'bytes': bytes});
+      }
     } catch (_) {}
 
     final dir = Directory('$uploadDirPath/dlna');
@@ -248,33 +259,42 @@ class SlideRenderer {
       _lastEnsuredDir = dir.path;
     }
     await File('${dir.path}/$name').writeAsBytes(bytes, flush: false);
+    if (stable) {
+      await File('${dir.path}/$stableName').writeAsBytes(bytes, flush: false);
+    }
 
     // Background pruning: keep only latest 5 slide files without blocking the caller
     scheduleMicrotask(() async {
       try {
         final entities = await dir.list().where((e) => e is File).toList();
-        if (entities.length > 5) {
-          final files = entities.cast<File>();
+        if (entities.length > 6) {
+          final files = entities
+              .cast<File>()
+              .where((f) => !f.path.contains('current_slide'))
+              .toList();
           final stats = await Future.wait(
               files.map((f) async => (file: f, stat: await f.stat())));
           stats.sort((a, b) => a.stat.modified.compareTo(b.stat.modified));
           for (var i = 0; i < stats.length - 5; i++) {
-            try { await stats[i].file.delete(); } catch (_) {}
+            try {
+              await stats[i].file.delete();
+            } catch (_) {}
           }
         }
       } catch (_) {}
     });
 
     final ip = (deviceIp.isEmpty || deviceIp == '...') ? '127.0.0.1' : deviceIp;
-    return 'http://$ip:$serverPort/dlna/$name';
+    final chosenName = stable ? stableName : name;
+    return 'http://$ip:$serverPort/dlna/$chosenName';
   }
 
   /// Convenience: capture + publish in one call.
   static Future<String?> captureAndPublish(Map<String, dynamic> tvState,
-      {required BuildContext context}) async {
+      {required BuildContext context, bool stable = false}) async {
     final png = await capture(tvState, context: context);
     if (png == null) return null;
-    return publish(png);
+    return publish(png, stable: stable);
   }
 
   // ══════════════════ Slide widget tree (mirrors tv.html) ══════════════════

@@ -1693,12 +1693,12 @@ class _ControllerPageState extends State<ControllerPage>
     }
     try {
       final url = await SlideRenderer.captureAndPublish(_tvState,
-          context: context);
+          context: context, stable: true);
       if (url == null) {
         _showSnack('Could not render the slide', error: true);
         return;
       }
-      final ok = await _dlna.castImage(url);
+      final ok = await _dlna.castSlide(url);
       _showSnack(ok ? 'Casting to ${_dlna.connectedName}' : 'TV cast failed',
           error: !ok);
     } catch (e) {
